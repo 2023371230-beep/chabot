@@ -1,14 +1,23 @@
 /**
  * Filtro rapido ANTES de llamar a la IA.
  *
- * Por que existe: la cuenta de Groq tiene ~1000 peticiones al dia. Cada
- * "buenos dias" que llegue a la IA se come una de esas mil y tarda ~1.5s en
- * responder. Un saludo no necesita un modelo de lenguaje: se resuelve con
- * reglas y contesta al instante, con cero costo.
+ * Por que existe: la cuenta de Groq da ~1000 peticiones al dia y 8000 tokens
+ * por minuto. Cada "buenos dias" que llegue a la IA se come una de esas mil y
+ * tarda ~1.5s. Un saludo no necesita un modelo de lenguaje.
  *
- * La regla de corte: solo se atajan mensajes que NO piden nada. En cuanto hay
- * el menor indicio de pedido, pasa a la IA. Es mejor gastar una peticion de
- * mas que contestar con una plantilla a alguien que queria comprar.
+ * Pero ahorrar no es lo unico que hace este archivo. Hay mensajes que NO
+ * DEBEN llegar a la IA porque la IA hace lo contrario de lo que el cliente
+ * quiere. El caso mas caro:
+ *
+ *     "cancela mi pedido de 20 kilos de pechuga"
+ *
+ * El modelo ve "20 kilos de pechuga", devuelve intent "pedido" y el sistema
+ * CREA un pedido nuevo. El cliente pidio cancelar y termina con el doble.
+ * Por eso cancelaciones, quejas, modificaciones y confirmaciones se atajan
+ * aqui, con reglas, antes de que el modelo pueda equivocarse.
+ *
+ * EL ORDEN DE LAS REGLAS ES LA REGLA. Se evalua de mas peligroso a mas
+ * inocente: una queja que menciona kilos es una queja, no un pedido.
  */
 
 const normalizar = (t: string): string =>
@@ -21,22 +30,38 @@ const normalizar = (t: string): string =>
     .trim();
 
 /**
- * Señales de que el cliente SI quiere algo. Si aparece cualquiera, el mensaje
- * va directo a la IA aunque venga envuelto en saludos.
+ * Tope de caracteres que se le manda al modelo.
+ *
+ * Un mensaje de 3000 caracteres (una cadena reenviada, un spam publicitario)
+ * se come el presupuesto de 8000 tokens/minuto y deja sin bot a todos los
+ * demas clientes durante un minuto entero. Ningun pedido real necesita mas
+ * de 400 caracteres.
+ */
+export const MAX_CARACTERES_IA = 400;
+
+/** Arriba de esto ya no es un pedido: es una cadena, un spam o un error. */
+const MAX_CARACTERES_MENSAJE = 700;
+
+/**
+ * Señales de que el cliente SI quiere comprar algo. Si aparece cualquiera, el
+ * mensaje va a la IA aunque venga envuelto en saludos.
+ *
+ * Van con `(?:...)` y `\b` a los dos lados a proposito: sin el grupo, la
+ * alternancia solo aplica el limite de palabra al primero y al ultimo, y
+ * "apartame" acababa haciendo match dentro de "apartamelo".
  */
 const SENALES_DE_PEDIDO = [
-  /\d/, // cualquier cifra: "20 kilos", "medio kilo" no, pero "1/2" si
-  /\bkilo|kilos|kg\b/,
-  /\bquiero|necesito|mandame|manda|dame|vendeme|apartame|encargo|pedido|surtir|surte\b/,
-  /\bpechuga|pierna|muslo|ala|alas|pata|patas|retazo|higado|molleja|pollo entero\b/,
-  /\bmedio|media|docena\b/,
-  /\bcuanto cuesta|a como|precio|cuesta|vale\b/,
-  /\btienes|hay\b/
+  /\d/,
+  /\b(?:kilos?|kgs?|kilogramos?)\b/,
+  /\b(?:quiero|necesito|ocupo|mandame|mandeme|manda|mande|dame|deme|regalas|regale|vendeme|vendame|apartame|apartamelo|aparta|apartar|encargo|encargar|surte|surta|surtir|llevame|pido|pedir)\b/,
+  /\b(?:pechugas?|piernas?|muslos?|alas?|alitas?|patas?|retazo|higado|molleja|pollos?|entero|entera)\b/,
+  /\b(?:medio|media|docena)\b/,
+  /\b(?:tienes|tiene|hay|manejan)\b/
 ];
 
 const SALUDOS = [
   /^hola\b/,
-  /\bbuen[oa]s? (dias|tardes|noches)\b/,
+  /\bbuen[oa]s? (?:dias|tardes|noches)\b/,
   /^que tal\b/,
   /^que onda\b/,
   /^buenas\b/,
@@ -48,86 +73,224 @@ const SALUDOS = [
 ];
 
 const AGRADECIMIENTOS = [
-  /^(muchas )?gracias\b/,
+  /^(?:muchas |mil )?gracias\b/,
   /^grax\b/,
-  /^ok gracias\b/,
-  /^va gracias\b/,
-  /^perfecto gracias\b/
+  /^(?:ok|va|vale|perfecto|excelente|listo) gracias\b/,
+  /\bse lo agradezco\b/
 ];
 
 const DESPEDIDAS = [
-  /^(hasta luego|nos vemos|bye|adios|buen dia|que este bien)\b/,
-  /^(ok|va|sale|listo|perfecto|de acuerdo)$/
+  /^(?:hasta luego|nos vemos|bye|adios|buen dia|que este bien|feliz dia)\b/,
+  /^(?:ok|va|sale|listo|perfecto|de acuerdo|entendido|orale|simon)(?: pues| gracias| entonces)?$/
 ];
 
 const PIDE_CATALOGO = [
-  /\bque (tienen|venden|manejan|hay)\b/,
-  /\bcatalogo|lista de precios|productos\b/,
-  /\bque me puedes ofrecer\b/
+  /\bque (?:tienen|venden|manejan|hay|productos)\b/,
+  /\b(?:catalogo|lista de precios|los precios|sus precios)\b/,
+  /\bque me puede[sn] ofrecer\b/,
+  /\bque productos\b/
 ];
 
-const PIDE_HORARIO = [/\bhorario|a que hora|abren|cierran|estan abiertos\b/];
+const PIDE_HORARIO = [/\b(?:horario|a que hora abren|abren|cierran|estan abiertos|hasta que hora)\b/];
 
-/**
- * Pregunta por precio. Se ataja ANTES de la IA porque el precio esta en la
- * base: mandarlo al modelo seria gastar una peticion para obtener un dato que
- * ya tenemos, con el riesgo de que lo invente.
- */
 const PIDE_PRECIO = [
-  /\bcuanto (cuesta|vale|sale|esta)\b/,
-  /\ba como (esta|dan|lo dan)\b/,
+  /\bcuanto (?:cuesta|vale|sale|esta)\b/,
+  /\ba como (?:esta|dan|lo dan|la dan)\b/,
   /\bque precio\b/,
   /\bprecio de\b/,
   /\bcuanto por\b/
 ];
 
-/** Una cantidad explicita convierte la consulta en pedido. */
+/** Una cantidad explicita convierte una consulta de precio en pedido. */
 const TIENE_CANTIDAD =
-  /\d+\s*(kilo|kilos|kg|k)\b|\b(medio|media|un|una|dos|tres|cuatro|cinco|diez|veinte)\s+(kilo|kilos|kg)\b/;
+  /\d+\s*(?:kilo|kilos|kg|k)\b|\b(?:medio|media|un|una|dos|tres|cuatro|cinco|diez|veinte)\s+(?:kilo|kilos|kg)\b/;
+
+// ── Reglas de alto riesgo ────────────────────────────────────────────────
+
+/**
+ * Quejas. Se atajan ANTES que cualquier cosa que parezca pedido: un reclamo
+ * que menciona kilos sigue siendo un reclamo, y contestarlo con un bot
+ * alegre ("con gusto, le anote 3 kilos") es peor que no contestar.
+ */
+const QUEJAS = [
+  /\b(?:echado a perder|podrido|apesta|huele mal|caducad[oa]|verde|baboso)\b/,
+  /\b(?:falto|faltaron|faltan|incompleto|equivocad[oa]|no era lo que|no es lo que)\b/,
+  /\b(?:no me llego|nunca llego|no llego|no me lo trajeron|no lo trajeron)\b/,
+  /\b(?:me cobraron|cobraron de mas|cobro de mas|reclamo|queja|devolucion|devolver|reembolso)\b/,
+  /\b(?:vino mal|llego mal|salio mal|esta mal|estaba mal|mala calidad|pesimo|pesima)\b/
+];
+
+const PIDE_HUMANO = [
+  /\bhablar con (?:una persona|alguien|un humano|el encargado|el dueno|la dueña|un asesor)\b/,
+  /\b(?:me comunica|comuniqueme|paseme con|con una persona|con un humano|atencion a clientes)\b/,
+  /\b(?:eres un bot|es un bot|eres una maquina|hablo con un robot)\b/
+];
+
+/**
+ * Cancelaciones. Requieren una palabra inequivoca (cancelar, anular) o un "ya no"
+ * que apunte a un pedido. Un "ya no" suelto es un rechazo de cotizacion, no
+ * una cancelacion, y se atiende mas abajo.
+ */
+const CANCELACIONES = [
+  /\bcancel/,
+  /\banul/,
+  /\bya no (?:lo |la |los |las )?(?:quiero|necesito|ocupo|va)\b.*\b(?:pedido|encargo|nada)\b/,
+  /\b(?:borra|elimina|quita) (?:el|mi) pedido\b/,
+  /\bya no (?:quiero|necesito) (?:el|mi) (?:pedido|encargo)\b/
+];
+
+/**
+ * Modificaciones de un pedido que ya existe. Si esto llega a la IA, el
+ * sistema crea un SEGUNDO pedido encima del primero y se despacha el doble.
+ */
+const MODIFICACIONES = [
+  /\bmejor que (?:sean|sea|me mande|me manden)\b/,
+  /\bmejor (?:son|hazlo|haganlo|ponme|pongame)\b/,
+  /\b(?:cambiale|cambia|cambiar|modifica|modificar|corrige) (?:el|mi|la) (?:pedido|orden|cantidad)\b/,
+  /\ben (?:vez|lugar) de\b/,
+  /\b(?:agregale|agrega|aumentale|aumenta|subele|quitale|quita|bajale|baja) .{0,20}\b(?:al|del|el|mi) pedido\b/,
+  /\bal pedido que (?:hice|te hice|le hice|puse)\b/
+];
+
+/**
+ * Preguntas por el estado de un pedido. Van ANTES que el horario: "a que hora
+ * me llega lo que pedi" trae "a que hora" y sin esta prioridad el bot
+ * contestaba el horario del negocio, que no es lo que preguntaron.
+ */
+const ESTADO_PEDIDO = [
+  /\bya (?:esta|estan|quedo|salio|se fue|lo mandaron|mandaron)\b/,
+  /\b(?:esta|estan) list[oa]s?\b/,
+  /\bcuando (?:llega|sale|me lo|lo entregan|entregan|me entregan)\b/,
+  /\ba que hora (?:me |lo |la )?(?:llega|llegan|sale|entregan|traen)\b/,
+  /\b(?:lo que pedi|el pedido que hice|mi pedido|mi encargo|mi orden)\b/,
+  /\bcomo va (?:el|mi) pedido\b/,
+  /\bstatus\b/
+];
+
+/** "Lo de siempre": se resuelve leyendo el ultimo pedido, no inventandolo. */
+const REPETIR = [
+  /\blo de siempre\b/,
+  /\blo mismo (?:de siempre|de la otra|que la otra|que siempre)\b/,
+  /\bcomo (?:la vez pasada|la ultima vez|siempre)\b/,
+  /\bmi pedido de siempre\b/
+];
+
+/** Respuestas a "se lo aparto?". Solo cuentan en mensajes cortos y sin pedido. */
+const AFIRMACIONES = [
+  /^(?:si|sip|simon|claro|dale|va|sale|orale|correcto|asi es|exacto|obvio)\b/,
+  /^(?:esta bien|de acuerdo|adelante|hagale|mandelo|mandalo|apartelo|apartemelo)\b/
+];
+
+const NEGACIONES = [
+  /^(?:no|nel|nop|nel pastel)\b/,
+  /^(?:mejor no|asi no|todavia no|ahorita no|luego|despues)\b/,
+  /^(?:dejalo|dejelo|olvidalo|olvidelo)\b/
+];
+
+/** Un "si" o un "no" solo tienen sentido si el mensaje es corto. */
+const MAX_LARGO_RESPUESTA_CORTA = 30;
+
+/**
+ * Para decidir si un "si" es confirmacion NO sirve la lista general de
+ * señales de pedido: "si, apartamelo" trae el verbo "apartamelo" y quedaba
+ * clasificado como pedido nuevo. Lo que de verdad convierte un "si" en pedido
+ * es que traiga una cifra o nombre un corte ("si, mandame 10 de pechuga").
+ */
+const MENCIONA_PRODUCTO =
+  /\b(?:pechugas?|piernas?|muslos?|alas?|alitas?|patas?|retazo|higado|molleja|pollos?)\b/;
 
 export type IntencionRapida =
+  /** Nada que contestar: emoji suelto, un punto, un mensaje vacio. */
+  | { tipo: 'ignorar' }
   | { tipo: 'saludo' }
   | { tipo: 'agradecimiento' }
   | { tipo: 'despedida' }
   | { tipo: 'catalogo' }
   | { tipo: 'horario' }
   | { tipo: 'precio'; texto: string }
+  | { tipo: 'cancelacion' }
+  | { tipo: 'modificacion' }
+  | { tipo: 'estado_pedido' }
+  | { tipo: 'confirmacion' }
+  | { tipo: 'rechazo' }
+  | { tipo: 'repetir' }
+  | { tipo: 'humano'; motivo: 'queja' | 'solicitud' }
+  /** Solo un numero: "20". Responde a una pregunta anterior nuestra. */
+  | { tipo: 'solo_numero'; valor: number }
+  | { tipo: 'demasiado_largo' }
   | { tipo: 'usar_ia'; traeSaludo: boolean };
 
 /**
  * Clasifica sin gastar un solo token.
  *
  * `traeSaludo` se devuelve incluso cuando el mensaje va a la IA: sirve para
- * que la respuesta abra saludando de vuelta. NO se recorta el saludo del
- * texto antes de mandarlo al modelo — el contexto completo ayuda a la
- * extraccion y recortar puede romper frases como "buenas, de las de ayer".
+ * que la respuesta abra saludando de vuelta. NO se recorta el saludo del texto
+ * antes de mandarlo al modelo — recortar rompe frases como "buenas, de las de
+ * ayer", y el ahorro seria de unos pocos tokens.
  */
 export const clasificar = (texto: string): IntencionRapida => {
-  const t = normalizar(texto);
+  const crudo = texto ?? '';
+  const t = normalizar(crudo);
 
-  if (!t) return { tipo: 'usar_ia', traeSaludo: false };
+  // 0. Sin contenido util. Un "👍" no merece respuesta: contestarlo es ruido
+  //    para el cliente y una peticion tirada para nosotros.
+  if (!t) return { tipo: 'ignorar' };
+
+  // 0b. Demasiado largo para ser un pedido. Se corta aqui para que no se
+  //     coma los 8000 tokens/minuto que comparten todos los clientes.
+  if (crudo.length > MAX_CARACTERES_MENSAJE) return { tipo: 'demasiado_largo' };
 
   const traeSaludo = SALUDOS.some((r) => r.test(t));
-  const pidealgo = SENALES_DE_PEDIDO.some((r) => r.test(t));
+  const pideAlgo = SENALES_DE_PEDIDO.some((r) => r.test(t));
 
+  // 1. Lo que una maquina no debe contestar sola.
+  if (QUEJAS.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'queja' };
+  if (PIDE_HUMANO.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'solicitud' };
+
+  // 2. Lo que la IA entenderia al reves.
+  if (CANCELACIONES.some((r) => r.test(t))) return { tipo: 'cancelacion' };
+  if (MODIFICACIONES.some((r) => r.test(t))) return { tipo: 'modificacion' };
+  if (ESTADO_PEDIDO.some((r) => r.test(t))) return { tipo: 'estado_pedido' };
+  if (REPETIR.some((r) => r.test(t))) return { tipo: 'repetir' };
+
+  // 3. Respuestas a una pregunta nuestra. Solo en mensajes cortos y sin
+  //    cifras ni cortes: "si" es una confirmacion, pero "si tienes pechuga
+  //    mandame 10" es un pedido.
+  if (
+    t.length <= MAX_LARGO_RESPUESTA_CORTA &&
+    !/\d/.test(t) &&
+    !MENCIONA_PRODUCTO.test(t)
+  ) {
+    if (AFIRMACIONES.some((r) => r.test(t))) return { tipo: 'confirmacion' };
+    if (NEGACIONES.some((r) => r.test(t))) return { tipo: 'rechazo' };
+  }
+
+  // 3b. Solo un numero: contesta a un "cuantos kilos?" que preguntamos antes.
+  const soloNumero = /^(\d+(?:[.,]\d+)?)$/.exec(t);
+  if (soloNumero) {
+    return { tipo: 'solo_numero', valor: Number(soloNumero[1].replace(',', '.')) };
+  }
+
+  // 4. Datos que ya viven en la base: contestarlos con IA seria pagar por algo
+  //    que ya tenemos, con el riesgo extra de que el modelo lo invente.
   if (PIDE_CATALOGO.some((r) => r.test(t))) return { tipo: 'catalogo' };
   if (PIDE_HORARIO.some((r) => r.test(t))) return { tipo: 'horario' };
 
-  // Pregunta de precio SIN cantidad: es una consulta, se contesta de la base.
-  // Con cantidad ("cuanto cuesta 20 kilos de pechuga") ya es un pedido y pasa
-  // a la IA para que extraiga los kilos.
+  // Precio SIN cantidad es consulta. Con cantidad ("cuanto cuesta 20 kilos de
+  // pechuga") ya es una cotizacion y necesita a la IA para sacar los kilos.
   if (PIDE_PRECIO.some((r) => r.test(t)) && !TIENE_CANTIDAD.test(t)) {
-    return { tipo: 'precio', texto };
+    return { tipo: 'precio', texto: crudo };
   }
 
-  // Ante la duda, la IA. Perder una venta cuesta mas que una peticion.
-  if (pidealgo) return { tipo: 'usar_ia', traeSaludo };
+  // 5. Ante la duda, la IA. Perder una venta cuesta mas que una peticion.
+  if (pideAlgo) return { tipo: 'usar_ia', traeSaludo };
+
+  // 6. Cortesia pura: no pide nada.
   if (AGRADECIMIENTOS.some((r) => r.test(t))) return { tipo: 'agradecimiento' };
   if (DESPEDIDAS.some((r) => r.test(t))) return { tipo: 'despedida' };
   if (traeSaludo) return { tipo: 'saludo' };
 
-  // Mensaje corto y sin señales claras: puede ser "de lo mismo" o un modismo.
-  // Se manda a la IA en vez de arriesgar una plantilla equivocada.
+  // 7. Sin señales claras: puede ser un modismo que no previmos. A la IA.
   return { tipo: 'usar_ia', traeSaludo: false };
 };
 

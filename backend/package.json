@@ -8,7 +8,10 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "simular": "tsx scripts/simular.ts",
+    "simular:conversaciones": "tsx scripts/simular-conversaciones.ts",
+    "simular:real": "tsx scripts/conversacion-real.ts"
   },
   "keywords": [
     "node",

@@ -1,12 +1,27 @@
 import { supabase } from '../../database/supabase.client';
 import { aiService } from '../ai/ai.service';
+import { clientesService } from '../clientes/clientes.service';
 import { pedidosService } from '../pedidos/pedidos.service';
 import { productosService } from '../productos/productos.service';
 import { formatCurrency, formatKg } from '../../shared/utils/format.utils';
 import { buscarProducto, interpretarFecha } from './whatsapp.matcher';
-import { clasificar, saludoPorHora } from './whatsapp.intents';
+import { clasificar, saludoPorHora, MAX_CARACTERES_IA } from './whatsapp.intents';
 import { configuracionService } from '../configuracion/configuracion.service';
 import { enviarMensaje, marcarComoLeido } from './whatsapp.client';
+import { mensajeDeEspera, puedeUsarIA, registrarUso } from './whatsapp.presupuesto';
+import {
+  firmaPedido,
+  olvidarCotizacion,
+  pedidoDuplicado,
+  recordarCotizacion,
+  recordarPedido,
+  recordarPreguntaKg,
+  recordarRespuesta,
+  respuestaRepetida,
+  tomarCotizacion,
+  tomarPreguntaKg,
+  type Renglon
+} from './whatsapp.memoria';
 import {
   esSoloEstados,
   extraerMensajes,
@@ -17,6 +32,15 @@ import {
 /** Codigo de PostgreSQL para violacion de restriccion unica. */
 const DUPLICADO = '23505';
 
+/**
+ * Tope de kilos por renglon antes de dudar.
+ *
+ * Un pedido de mayoreo grande son 200 o 300 kilos. Arriba de 500 casi siempre
+ * es un dedazo ("2000" en vez de "200") o la IA leyendo mal un numero de
+ * telefono. Despachar eso vacia el almacen, asi que se pregunta.
+ */
+const MAX_KG_RAZONABLE = 500;
+
 type ResultadoMensaje = {
   wamid: string;
   telefono: string;
@@ -24,6 +48,23 @@ type ResultadoMensaje = {
   motivo?: string;
   respuesta?: string;
   pedidoId?: string;
+};
+
+type Atencion = { respuesta: string; pedidoId?: string };
+
+/** Un pedido con lo que hace falta para hablar de el con el cliente. */
+type PedidoDelCliente = {
+  id: string;
+  estado: string;
+  fecha_entrega: string | null;
+  total_kg: number | string;
+  total_precio: number | string;
+  created_at: string;
+  pedido_detalles?: Array<{
+    producto_id: string;
+    kg: number | string;
+    productos?: { nombre?: string } | null;
+  }>;
 };
 
 export const whatsappService = {
@@ -86,60 +127,316 @@ export const whatsappService = {
       mensaje.telefono,
       mensaje.nombrePerfil
     );
+
+    // Respuesta vacia = decision deliberada de no contestar (un "👍" suelto).
+    // Contestar cada emoji es ruido para el cliente y trabajo para nosotros.
+    if (!respuesta) {
+      await supabase.from('mensajes_whatsapp').update({ procesado: true }).eq('id', guardado.id);
+      return { ...base, procesado: true, motivo: 'Sin respuesta necesaria' };
+    }
+
     await this.responder(mensaje.telefono, respuesta, guardado.id);
     return { ...base, procesado: true, respuesta, pedidoId };
   },
 
   /**
-   * Del texto del cliente al pedido creado.
+   * Del texto del cliente a la respuesta.
    *
-   * La IA SOLO extrae datos: que producto y cuantos kilos. No decide precios,
-   * no valida stock, no aplica el limite de mayoreo. Todo eso lo resuelve
-   * `pedidosService.createOrder`, que es la misma ruta que usa el dashboard.
-   * Asi las reglas viven en un solo lugar y no se pueden contradecir.
+   * El orden importa: primero se descarta lo repetido, luego se clasifica sin
+   * IA, y solo lo que de verdad necesita entenderse llega al modelo. La IA
+   * SOLO extrae datos; los precios, el stock y el limite de mayoreo los
+   * resuelve `pedidosService.createOrder`, la misma ruta que usa el dashboard,
+   * para que las reglas no puedan contradecirse.
    */
-  async atender(
-    texto: string,
-    telefono: string,
-    nombrePerfil?: string
-  ): Promise<{ respuesta: string; pedidoId?: string }> {
-    // 1. Filtro rapido: lo que no necesita IA se contesta al instante y con
-    //    cero costo. Solo se ataja lo que NO pide nada; ante la menor senal de
-    //    pedido pasa a la IA, porque perder una venta cuesta mas que una
-    //    peticion de mas.
+  async atender(texto: string, telefono: string, nombrePerfil?: string): Promise<Atencion> {
+    // 0. El cliente reenvio el mismo texto porque no vio la palomita. Se le
+    //    repite lo que ya se le contesto en vez de procesarlo otra vez.
+    const yaContestado = respuestaRepetida(telefono, texto);
+    if (yaContestado) return { respuesta: yaContestado };
+
+    const resultado = await this.decidir(texto, telefono, nombrePerfil);
+    if (resultado.respuesta) recordarRespuesta(telefono, texto, resultado.respuesta);
+    return resultado;
+  },
+
+  async decidir(texto: string, telefono: string, nombrePerfil?: string): Promise<Atencion> {
     const intencion = clasificar(texto);
     const saludo = saludoPorHora();
 
-    if (intencion.tipo === 'saludo') {
+    switch (intencion.tipo) {
+      // Sin contenido: no se contesta. Es la unica rama que devuelve vacio.
+      case 'ignorar':
+        return { respuesta: '' };
+
+      case 'demasiado_largo':
+        return {
+          respuesta:
+            'Se me hizo muy largo el mensaje para leerlo bien. Digame nada mas el corte y los kilos, por ejemplo: "20 kilos de pechuga para el viernes".'
+        };
+
+      case 'humano':
+        return { respuesta: await this.escalarAPersona(intencion.motivo, telefono) };
+
+      case 'cancelacion':
+        return { respuesta: await this.atenderCancelacion(telefono) };
+
+      case 'modificacion':
+        return { respuesta: await this.atenderModificacion(telefono) };
+
+      case 'estado_pedido':
+        return { respuesta: await this.atenderEstado(telefono) };
+
+      case 'confirmacion':
+        return this.atenderConfirmacion(telefono, nombrePerfil);
+
+      case 'rechazo':
+        olvidarCotizacion(telefono);
+        return { respuesta: 'Sin problema. Aqui andamos por si se anima mas tarde.' };
+
+      case 'repetir':
+        return { respuesta: await this.atenderRepetir(telefono, saludo) };
+
+      case 'solo_numero':
+        return this.atenderSoloNumero(telefono, intencion.valor, nombrePerfil);
+
+      case 'saludo':
+        return {
+          respuesta: `${saludo}! Con gusto le atiendo. Digame que corte necesita y cuantos kilos, por ejemplo: "15 kilos de pierna para manana".`
+        };
+
+      case 'agradecimiento':
+        return { respuesta: 'Con gusto, para servirle. Aqui andamos para lo que necesite.' };
+
+      case 'despedida':
+        return { respuesta: 'Gracias a usted. Que tenga buen dia.' };
+
+      case 'catalogo':
+        return { respuesta: await this.armarCatalogo(saludo) };
+
+      case 'horario':
+        return { respuesta: await this.armarHorario(saludo) };
+
+      case 'precio':
+        return { respuesta: await this.armarPrecio(intencion.texto, saludo) };
+
+      default:
+        return this.atenderConIA(texto, telefono, nombrePerfil, saludo, intencion.traeSaludo);
+    }
+  },
+
+  // ── Ramas que no gastan IA ────────────────────────────────────────────
+
+  /**
+   * Quejas y peticiones de hablar con alguien.
+   *
+   * Un reclamo contestado por un bot enoja mas que un reclamo sin contestar.
+   * Aqui no se intenta resolver nada: se reconoce, se deja constancia en la
+   * base para que se vea en el dashboard, y se promete una persona.
+   */
+  async escalarAPersona(motivo: 'queja' | 'solicitud', telefono: string): Promise<string> {
+    await supabase.from('mensajes_whatsapp').insert({
+      telefono,
+      mensaje: `[ATENCION] ${motivo === 'queja' ? 'Queja' : 'Pidio hablar con una persona'}`,
+      tipo: 'sistema',
+      procesado: false
+    });
+
+    if (motivo === 'queja') {
+      return 'Lamento mucho el problema. Ya pase su caso con el encargado y le contesta en un momento para resolverlo.';
+    }
+    return 'Claro que si. En un momento le contesta una persona por aqui mismo.';
+  },
+
+  /**
+   * Cancelaciones.
+   *
+   * Solo se cancela solo lo que todavia esta PENDIENTE: ahi no se movio stock
+   * ni se preparo nada, y deshacerlo no cuesta. Un pedido ya confirmado si
+   * toco inventario, y esa decision no la toma un bot.
+   */
+  async atenderCancelacion(telefono: string): Promise<string> {
+    const pedidos = await this.pedidosDelCliente(telefono, 3);
+    const ultimo = pedidos[0];
+
+    if (!ultimo) {
+      return 'No encuentro ningun pedido suyo abierto. Si quiere hacer uno, digame el corte y los kilos.';
+    }
+
+    if (ultimo.estado === 'cancelado') {
+      return 'Ese pedido ya estaba cancelado. No se preocupe, no se le va a cobrar nada.';
+    }
+
+    if (ultimo.estado !== 'pendiente') {
+      return `Su pedido de ${formatKg(ultimo.total_kg)} ya esta ${ultimo.estado} y ya se preparo. Le paso el caso al encargado para ver como le ayudamos.`;
+    }
+
+    try {
+      await pedidosService.updateOrderStatus(ultimo.id, 'cancelado');
+      return `Listo, cancele su pedido de ${formatKg(ultimo.total_kg)} por ${formatCurrency(ultimo.total_precio)}. No se le cobra nada. Cuando guste hacemos otro.`;
+    } catch (e) {
+      console.error('[whatsapp] no se pudo cancelar:', e instanceof Error ? e.message : e);
+      return 'No pude cancelarlo automaticamente. Ya le avise al encargado para que lo haga en este momento.';
+    }
+  },
+
+  /**
+   * "Mejor que sean 30 y no 20".
+   *
+   * Cambiar un pedido existente por WhatsApp es donde mas facil se duplica el
+   * pollo: si esto llegara a la IA, extraeria "30 kilos" y crearia un SEGUNDO
+   * pedido encima del de 20. Se le muestra al cliente lo que tiene y se pasa a
+   * una persona.
+   */
+  async atenderModificacion(telefono: string): Promise<string> {
+    const [ultimo] = await this.pedidosDelCliente(telefono, 1);
+
+    if (!ultimo) {
+      return 'No tengo ningun pedido suyo para cambiar. Digame de nuevo el corte y los kilos y se lo anoto.';
+    }
+
+    const lineas = ['Su pedido ahorita esta asi:', ''];
+    for (const d of ultimo.pedido_detalles ?? []) {
+      lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
+    }
+    lineas.push('');
+    lineas.push(`Total: ${formatKg(ultimo.total_kg)} — ${formatCurrency(ultimo.total_precio)}`);
+    lineas.push('');
+    lineas.push('Para no equivocarme con el cambio, en un momento le contesta una persona y se lo ajusta.');
+    return lineas.join('\n');
+  },
+
+  /** "Ya esta listo mi pedido?" se contesta de la base, no con IA. */
+  async atenderEstado(telefono: string): Promise<string> {
+    const [ultimo] = await this.pedidosDelCliente(telefono, 1);
+
+    if (!ultimo) {
+      return 'No encuentro pedidos suyos. Si quiere hacer uno, digame el corte y los kilos.';
+    }
+
+    const detalle = (ultimo.pedido_detalles ?? [])
+      .map((d) => `${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`)
+      .join(', ');
+
+    const entrega = ultimo.fecha_entrega ? ` Entrega: ${ultimo.fecha_entrega}.` : '';
+
+    const estados: Record<string, string> = {
+      pendiente: 'esta anotado y falta confirmarlo',
+      confirmado: 'ya esta confirmado y en preparacion',
+      completado: 'ya se entrego',
+      cancelado: 'esta cancelado'
+    };
+
+    return `Su pedido de ${detalle} ${estados[ultimo.estado] ?? ultimo.estado}.${entrega}`;
+  },
+
+  /**
+   * "Si, apartamelo" despues de una cotizacion.
+   *
+   * Se crea el pedido con los renglones que YA se habian resuelto al cotizar:
+   * ni una peticion de IA mas, y cero riesgo de que el modelo entienda otra
+   * cosa la segunda vez.
+   */
+  async atenderConfirmacion(telefono: string, nombrePerfil?: string): Promise<Atencion> {
+    const cotizacion = tomarCotizacion(telefono);
+
+    if (!cotizacion) {
+      // Un "va" o un "sale" sueltos son solo un acuse de recibo.
+      return { respuesta: 'Perfecto. Cualquier cosa aqui ando.' };
+    }
+
+    return this.crearPedido({
+      telefono,
+      nombrePerfil,
+      renglones: cotizacion.renglones,
+      fechaEntrega: cotizacion.fechaEntrega,
+      saludo: null
+    });
+  },
+
+  /** "Lo de siempre": se lee el ultimo pedido en vez de inventarlo. */
+  async atenderRepetir(telefono: string, saludo: string): Promise<string> {
+    const [ultimo] = await this.pedidosDelCliente(telefono, 1);
+
+    if (!ultimo?.pedido_detalles?.length) {
+      return `${saludo}! Todavia no tengo un pedido anterior suyo. Digame que corte necesita y cuantos kilos.`;
+    }
+
+    const renglones: Renglon[] = ultimo.pedido_detalles.map((d) => ({
+      producto_id: d.producto_id,
+      kg: Number(d.kg)
+    }));
+
+    // Se cotiza y se pregunta. El "si" del cliente lo convierte en pedido sin
+    // gastar IA, porque los renglones ya quedaron guardados.
+    recordarCotizacion(telefono, renglones);
+
+    const lineas = [`${saludo}! Su ultimo pedido fue:`, ''];
+    for (const d of ultimo.pedido_detalles) {
+      lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
+    }
+    lineas.push('');
+    lineas.push('Se lo repito igual?');
+    return lineas.join('\n');
+  },
+
+  /**
+   * El cliente contesto "20" a un "cuantos kilos de pechuga?".
+   *
+   * Sin esta rama el numero suelto iba a la IA, que no tiene forma de saber de
+   * que corte hablamos, y el cliente recibia un "no entendi" despues de haber
+   * contestado exactamente lo que le preguntamos.
+   */
+  async atenderSoloNumero(
+    telefono: string,
+    valor: number,
+    nombrePerfil?: string
+  ): Promise<Atencion> {
+    const pendiente = tomarPreguntaKg(telefono);
+
+    if (!pendiente) {
       return {
-        respuesta: `${saludo}! Con gusto le atiendo. Digame que corte necesita y cuantos kilos, por ejemplo: "15 kilos de pierna para manana".`
+        respuesta: `${valor} de que corte? Digame por ejemplo "${valor} kilos de pechuga".`
       };
     }
 
-    if (intencion.tipo === 'agradecimiento') {
-      return { respuesta: 'Con gusto, para servirle. Aqui andamos para lo que necesite.' };
+    if (valor <= 0 || valor > MAX_KG_RAZONABLE) {
+      recordarPreguntaKg(telefono, pendiente.producto_id, pendiente.nombre);
+      return {
+        respuesta: `${valor} kilos de ${pendiente.nombre} es bastante. Me confirma la cantidad, porfa?`
+      };
     }
 
-    if (intencion.tipo === 'despedida') {
-      return { respuesta: 'Gracias a usted. Que tenga buen dia.' };
+    return this.crearPedido({
+      telefono,
+      nombrePerfil,
+      renglones: [{ producto_id: pendiente.producto_id, kg: valor }],
+      saludo: null
+    });
+  },
+
+  // ── Rama que si gasta IA ──────────────────────────────────────────────
+
+  async atenderConIA(
+    texto: string,
+    telefono: string,
+    nombrePerfil: string | undefined,
+    saludo: string,
+    traeSaludo: boolean
+  ): Promise<Atencion> {
+    // Racionamiento: si ya no hay cuota, se pasa a una persona en vez de
+    // fallar. El cliente no tiene por que enterarse de nuestros limites.
+    const cuota = puedeUsarIA(telefono);
+    if (!cuota.permitido) {
+      console.warn(`[whatsapp] sin cuota de IA (${cuota.motivo}) para ${telefono}`);
+      return { respuesta: mensajeDeEspera(cuota.motivo) };
     }
 
-    if (intencion.tipo === 'catalogo') {
-      return { respuesta: await this.armarCatalogo(saludo) };
-    }
-
-    if (intencion.tipo === 'horario') {
-      return { respuesta: await this.armarHorario(saludo) };
-    }
-
-    if (intencion.tipo === 'precio') {
-      return { respuesta: await this.armarPrecio(intencion.texto, saludo) };
-    }
-
-    // 2. Solo lo que de verdad puede ser un pedido llega hasta aqui.
     let extraido;
     try {
-      const salida = await aiService.extractOrderFromMessage(texto);
+      registrarUso(telefono);
+      // Recorte defensivo: ningun pedido real necesita mas de 400 caracteres,
+      // y un mensaje enorme se come los tokens por minuto de todos.
+      const salida = await aiService.extractOrderFromMessage(texto.slice(0, MAX_CARACTERES_IA));
       if (!salida.configured) {
         return {
           respuesta:
@@ -150,7 +447,8 @@ export const whatsappService = {
     } catch (e) {
       console.error('[whatsapp] fallo la IA:', e instanceof Error ? e.message : e);
       return {
-        respuesta: 'No pude entender tu mensaje. Escribeme por ejemplo: "20 kilos de pechuga para el viernes".'
+        respuesta:
+          'No pude entender tu mensaje. Escribeme por ejemplo: "20 kilos de pechuga para el viernes".'
       };
     }
 
@@ -161,15 +459,15 @@ export const whatsappService = {
     }
 
     // "Cuanto cuesta 20 kilos de pechuga" es una COTIZACION, no un pedido.
-    // Crear el pedido aqui seria presumir que ya compro. Se cotiza y se
-    // pregunta, que ademas es como lo haria una persona en el mostrador.
+    // Crear el pedido aqui seria presumir que ya compro.
     const soloCotiza = extraido.intent === 'consulta';
 
-    // 3. Traducir nombres a productos reales del catalogo.
+    // Traducir nombres a productos reales del catalogo, sin IA.
     const catalogo = await productosService.findAll();
-    const renglones: { producto_id: string; kg: number }[] = [];
+    const renglones: Renglon[] = [];
     const noEncontrados: string[] = [];
-    const sinCantidad: string[] = [];
+    const sinCantidad: { id: string; nombre: string }[] = [];
+    const exagerados: string[] = [];
     let sugerencias: string[] = [];
 
     for (const item of extraido.productos) {
@@ -181,61 +479,94 @@ export const whatsappService = {
         continue;
       }
       if (!item.kg || item.kg <= 0) {
-        sinCantidad.push(match.producto.nombre);
+        sinCantidad.push({ id: match.producto.id, nombre: match.producto.nombre });
+        continue;
+      }
+      // Cordura: "2000 kilos" casi siempre es un dedazo o un numero mal leido.
+      if (item.kg > MAX_KG_RAZONABLE) {
+        exagerados.push(`${item.kg} kg de ${match.producto.nombre}`);
         continue;
       }
       renglones.push({ producto_id: match.producto.id, kg: item.kg });
     }
 
-    // 4. Preguntar antes que adivinar.
-    if (sinCantidad.length) {
+    if (exagerados.length) {
       return {
-        respuesta: `Claro que si. Cuantos kilos de ${sinCantidad.join(' y ')} va a necesitar?`
+        respuesta: `Me sale ${exagerados.join(' y ')}, y es bastante. Me confirma la cantidad antes de anotarlo?`
+      };
+    }
+
+    // Preguntar antes que adivinar. Se recuerda QUE se pregunto, para que el
+    // "20" que conteste el cliente no necesite otra peticion de IA.
+    if (sinCantidad.length) {
+      recordarPreguntaKg(telefono, sinCantidad[0].id, sinCantidad[0].nombre);
+      return {
+        respuesta: `Claro que si. Cuantos kilos de ${sinCantidad.map((s) => s.nombre).join(' y ')} va a necesitar?`
       };
     }
 
     if (!renglones.length) {
       const lista = sugerencias.length ? `\n\nTenemos: ${sugerencias.join(', ')}.` : '';
+      return { respuesta: `No manejamos ${noEncontrados.join(' ni ')}.${lista}` };
+    }
+
+    const fechaEntrega = interpretarFecha(extraido.fecha_entrega) ?? undefined;
+
+    if (soloCotiza) {
+      return { respuesta: this.armarCotizacion(telefono, renglones, catalogo, saludo, fechaEntrega) };
+    }
+
+    return this.crearPedido({
+      telefono,
+      nombrePerfil,
+      renglones,
+      fechaEntrega,
+      notas: extraido.notas ?? undefined,
+      noEncontrados,
+      saludo: traeSaludo ? saludo : null
+    });
+  },
+
+  // ── Piezas compartidas ────────────────────────────────────────────────
+
+  /**
+   * Crea el pedido, con la ultima red contra los duplicados.
+   *
+   * El cliente que no ve respuesta reescribe su pedido con otras palabras. La
+   * cache de texto identico no lo agarra porque el texto cambio, pero los
+   * renglones resueltos son los mismos: esa huella es la que se compara.
+   */
+  async crearPedido(params: {
+    telefono: string;
+    nombrePerfil?: string;
+    renglones: Renglon[];
+    fechaEntrega?: string;
+    notas?: string;
+    noEncontrados?: string[];
+    saludo: string | null;
+  }): Promise<Atencion> {
+    const { telefono, nombrePerfil, renglones, fechaEntrega, notas, saludo } = params;
+    const firma = firmaPedido(renglones);
+
+    const repetido = pedidoDuplicado(telefono, firma);
+    if (repetido) {
       return {
-        respuesta: `No manejamos ${noEncontrados.join(' ni ')}.${lista}`
+        respuesta: `Ese pedido ya me lo habia anotado, no se preocupe. Se lo repito:\n\n${repetido}`
       };
     }
 
-    // 5a. Cotizacion: se calcula el total sin crear nada.
-    if (soloCotiza) {
-      const catalogoMap = new Map(catalogo.map((p) => [p.id, p]));
-      const lineas = [`${saludo}! Le sale asi:`, ''];
-      let total = 0;
-      let kilos = 0;
-      for (const r of renglones) {
-        const prod = catalogoMap.get(r.producto_id);
-        if (!prod) continue;
-        const sub = r.kg * Number(prod.precio_kg);
-        total += sub;
-        kilos += r.kg;
-        lineas.push(`  ${formatKg(r.kg)} de ${prod.nombre} — ${formatCurrency(sub)}`);
-      }
-      lineas.push('');
-      lineas.push(`Total: ${formatKg(kilos)} — ${formatCurrency(total)}`);
-      lineas.push('');
-      lineas.push('Se lo aparto?');
-      return { respuesta: lineas.join('\n') };
-    }
-
-    // 5b. Crear el pedido por la MISMA ruta que el dashboard.
     try {
       const { pedido, warnings } = await pedidosService.createOrder({
         cliente: { telefono, nombre: nombrePerfil },
-        fecha_entrega: interpretarFecha(extraido.fecha_entrega) ?? undefined,
+        fecha_entrega: fechaEntrega,
         origen: 'whatsapp',
-        notas: extraido.notas ?? undefined,
+        notas,
         productos: renglones
       });
 
-      return {
-        respuesta: componerResumen(pedido, warnings, noEncontrados, intencion.traeSaludo ? saludo : null),
-        pedidoId: pedido.id
-      };
+      const resumen = componerResumen(pedido, warnings, params.noEncontrados ?? [], saludo);
+      recordarPedido(telefono, firma, resumen);
+      return { respuesta: resumen, pedidoId: pedido.id };
     } catch (e) {
       const detalle = e instanceof Error ? e.message : 'Error desconocido';
       console.error('[whatsapp] no se pudo crear el pedido:', detalle);
@@ -243,6 +574,62 @@ export const whatsappService = {
         respuesta: 'No pude registrar tu pedido en este momento. Intenta de nuevo en un rato.'
       };
     }
+  },
+
+  /**
+   * Cotiza y se acuerda de lo que cotizo.
+   *
+   * Guardar los renglones es lo que permite que un "si porfa" se convierta en
+   * pedido sin volver a molestar a la IA.
+   */
+  armarCotizacion(
+    telefono: string,
+    renglones: Renglon[],
+    catalogo: Awaited<ReturnType<typeof productosService.findAll>>,
+    saludo: string,
+    fechaEntrega?: string
+  ): string {
+    recordarCotizacion(telefono, renglones, fechaEntrega);
+
+    const porId = new Map(catalogo.map((p) => [p.id, p]));
+    const lineas = [`${saludo}! Le sale asi:`, ''];
+    let total = 0;
+    let kilos = 0;
+
+    for (const r of renglones) {
+      const prod = porId.get(r.producto_id);
+      if (!prod) continue;
+      const sub = r.kg * Number(prod.precio_kg);
+      total += sub;
+      kilos += r.kg;
+      lineas.push(`  ${formatKg(r.kg)} de ${prod.nombre} — ${formatCurrency(sub)}`);
+    }
+
+    lineas.push('');
+    lineas.push(`Total: ${formatKg(kilos)} — ${formatCurrency(total)}`);
+    lineas.push('');
+    lineas.push('Se lo aparto?');
+    return lineas.join('\n');
+  },
+
+  /** Los pedidos recientes de un telefono, del mas nuevo al mas viejo. */
+  async pedidosDelCliente(telefono: string, limite: number): Promise<PedidoDelCliente[]> {
+    const cliente = await clientesService.findByPhone(telefono);
+    if (!cliente) return [];
+
+    const { data, error } = await supabase
+      .from('pedidos')
+      .select('*, pedido_detalles(*, productos(*))')
+      .eq('cliente_id', cliente.id)
+      .order('created_at', { ascending: false })
+      .limit(limite);
+
+    if (error) {
+      console.error('[whatsapp] no se pudieron leer los pedidos:', error.message);
+      return [];
+    }
+
+    return (data ?? []) as PedidoDelCliente[];
   },
 
   /** Catalogo con precios reales. Se arma de la base, sin IA. */
@@ -273,8 +660,6 @@ export const whatsappService = {
       return `${saludo}! El kilo de ${p.nombre} esta en ${formatCurrency(p.precio_kg)}. Cuantos kilos le mando?`;
     }
 
-    // No se identifico el corte: se manda la lista completa, que igual
-    // contesta la pregunta.
     return this.armarCatalogo(saludo);
   },
 
@@ -322,12 +707,6 @@ type PedidoResumen = {
   }>;
 };
 
-const componerSinStock = (warnings: string[]): string[] =>
-  warnings.filter((w) => w.toLowerCase().includes('stock'));
-
-const componerSinStockNi = (warnings: string[]): string[] =>
-  warnings.filter((w) => !w.toLowerCase().includes('stock'));
-
 function componerResumen(
   pedido: PedidoResumen,
   warnings: string[],
@@ -336,9 +715,7 @@ function componerResumen(
 ): string {
   // Si el cliente saludo, se le devuelve el saludo: cuesta cero y cambia por
   // completo como se siente el trato.
-  const lineas: string[] = saludo
-    ? [`${saludo}! Con gusto. Le anote:`]
-    : ['Con gusto. Le anote:'];
+  const lineas: string[] = saludo ? [`${saludo}! Con gusto. Le anote:`] : ['Con gusto. Le anote:'];
 
   for (const d of pedido.pedido_detalles ?? []) {
     lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
@@ -356,8 +733,8 @@ function componerResumen(
     lineas.push(`Disculpe, no manejamos ${noEncontrados.join(' ni ')}, por eso no va en el pedido.`);
   }
 
-  const stock = componerSinStock(warnings);
-  const otros = componerSinStockNi(warnings);
+  const stock = warnings.filter((w) => w.toLowerCase().includes('stock'));
+  const otros = warnings.filter((w) => !w.toLowerCase().includes('stock'));
 
   if (stock.length) {
     lineas.push('');

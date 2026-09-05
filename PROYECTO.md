@@ -53,7 +53,13 @@ Pollito/
 │   │   │   ├── pedidos/
 │   │   │   ├── productos/
 │   │   │   └── whatsapp/          webhook + cliente de Meta
+│   │   │       ├── whatsapp.intents.ts      reglas SIN IA (el filtro)
+│   │   │       ├── whatsapp.matcher.ts      nombre de corte → UUID, fechas
+│   │   │       ├── whatsapp.memoria.ts      memoria corta de conversación
+│   │   │       ├── whatsapp.presupuesto.ts  racionamiento de la cuota de IA
+│   │   │       └── whatsapp.service.ts      orquesta todo
 │   │   └── shared/                errores, respuestas, validación
+│   ├── scripts/                   simuladores (`npm run simular`)
 │   └── sql/
 │       ├── 001_schema_completo.sql   ← el esquema, listo para pegar
 │       └── README.md                 ← justificación de cada decisión
@@ -127,6 +133,43 @@ Funciona. Probado con un mensaje real:
 | Mismo `wamid` dos veces | Queda **1 solo** mensaje |
 | Payload basura | 200 (no 400, que causaría reintentos en bucle) |
 | Solo `statuses` | No crea nada |
+
+### ✅ Filtro de intenciones y racionamiento de IA
+
+El cuello de botella real de Groq, medido contra las cabeceras de la API:
+
+```
+x-ratelimit-limit-requests: 1000    por día
+x-ratelimit-limit-tokens:   8000    por MINUTO
+```
+
+No hay recarga mensual. El límite por minuto es el que duele: lo revienta un
+solo cliente mandando diez mensajes seguidos, y durante ese minuto el bot deja
+de funcionar **para todos**.
+
+Contra eso hay cuatro capas, en orden:
+
+| Capa | Qué corta | Dónde |
+|---|---|---|
+| Clasificador por reglas | Cortesía, catálogo, horario, precio, cancelaciones, quejas, estado de pedido, basura | `whatsapp.intents.ts` |
+| Memoria corta | Texto reenviado, cotización confirmada, respuesta a "¿cuántos kilos?" | `whatsapp.memoria.ts` |
+| Presupuesto | 900/día, 15/minuto, 20 por teléfono por hora | `whatsapp.presupuesto.ts` |
+| Recorte | Mensajes > 400 caracteres se truncan; > 700 no llegan a la IA | `whatsapp.intents.ts` |
+
+Medido con los simuladores:
+
+| Prueba | Resultado |
+|---|---|
+| 52 escenarios reales | **52 correctos, 0 peticiones desperdiciadas** (antes: 30 correctos, 20 desperdiciadas) |
+| 19 revisiones de conversación | **19 pasadas** |
+| Conversación real de 12 mensajes que termina en pedido | **1 sola petición de IA** |
+| `GET /api/health` | expone `ia.restantesHoy` para ver la cuota bajando |
+
+Se re-corren con:
+
+```bash
+cd backend && npm run simular && npm run simular:conversaciones
+```
 
 ---
 
@@ -299,6 +342,42 @@ es de `GRANT`. El script los concede tabla por tabla.
 `resumen_dashboard` necesita un `REVOKE` explícito para `anon`/`authenticated`,
 porque Supabase concede privilegios por defecto a las relaciones nuevas de
 `public`. Es el único objeto del esquema que hay que cerrar a mano.
+
+### La IA entiende "cancela mi pedido de 20 kilos" como un pedido de 20 kilos
+
+La trampa más cara de todas. El modelo ve *"20 kilos de pechuga"*, devuelve
+`intent: "pedido"` y el sistema **crea un pedido nuevo**. El cliente pidió
+cancelar y termina con el doble. Lo mismo pasa con *"mejor que sean 30 y no
+20"*, que crea un segundo pedido encima del primero.
+
+Por eso cancelaciones, modificaciones, quejas y confirmaciones se atajan con
+reglas **antes** de la IA. **El orden de las reglas en `whatsapp.intents.ts` es
+la regla**: se evalúa de más peligroso a más inocente, y una queja que menciona
+kilos sigue siendo una queja.
+
+### Un `` en una alternancia no aplica a todos los términos
+
+`/quiero|necesito|apartame/` sólo pone el límite de palabra en el primero
+y el último. Así, `apartame` hacía match dentro de **"apartamelo"**, y por eso
+*"si, apartamelo"* se clasificaba como pedido nuevo en vez de confirmación.
+La forma correcta es agrupar: `/(?:quiero|necesito|apartame)/`.
+
+### La deduplicación por `wa_message_id` no cubre el reenvío
+
+Si el cliente no ve la palomita y reescribe su pedido, ese es un mensaje nuevo
+de verdad, con id distinto: la restricción `UNIQUE` no lo detiene y se crean
+dos pedidos. Hacen falta otras dos redes, ambas en `whatsapp.memoria.ts`:
+caché del texto idéntico (3 min) y huella de los renglones ya resueltos
+(10 min), que agarra el caso de reescribirlo con otras palabras.
+
+### El bot no puede preguntar lo que no sabe oír
+
+`"Se lo aparto?"` y `"¿Cuántos kilos?"` son preguntas, y WhatsApp no tiene
+sesión: el `"si porfa"` o el `"20"` que contesta el cliente llegan solos, sin
+nada del mensaje anterior. Sin memoria corta el bot respondía *"no alcancé a
+identificar el pedido"* a alguien que acababa de contestar exactamente lo que
+se le preguntó. Guardar la cotización además **ahorra** la petición: el "sí" se
+convierte en pedido con los renglones que ya estaban resueltos.
 
 ### `REFRESH MATERIALIZED VIEW CONCURRENTLY` no corre dentro de una función
 
