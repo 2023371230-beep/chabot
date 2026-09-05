@@ -19,7 +19,7 @@ export const env = {
   supabaseSecretKey: required('SUPABASE_SECRET_KEY'),
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
   groqApiKey: process.env.GROQ_API_KEY,
-  groqModel: process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant'
+  groqModel: process.env.GROQ_MODEL ?? 'openai/gpt-oss-20b'
 };
 
 export const isProduction = env.nodeEnv === 'production';
