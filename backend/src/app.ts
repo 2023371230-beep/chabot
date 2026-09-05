@@ -10,7 +10,18 @@ export const app = express();
 
 app.use(helmet());
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '1mb' }));
+// `verify` guarda el cuerpo TAL CUAL llego, antes de parsearlo.
+// La firma X-Hub-Signature-256 de Meta se calcula sobre esos bytes exactos:
+// re-serializar el JSON cambia espacios y orden de llaves, y la firma ya no
+// coincide.
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, _res, buf) => {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
+    }
+  })
+);
 app.use(morgan('dev'));
 
 app.use('/api', apiRoutes);

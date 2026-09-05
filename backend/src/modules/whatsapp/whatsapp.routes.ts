@@ -1,14 +1,19 @@
 import { Router } from 'express';
-import { validateRequest } from '../../shared/validation/validateRequest';
-import { whatsappWebhook } from './whatsapp.controller';
-import { whatsappWebhookSchema } from './whatsapp.schemas';
+import {
+  probarMensaje,
+  recibirWebhook,
+  verificarWebhook
+} from './whatsapp.controller';
 
 const router = Router();
 
-router.post(
-  '/webhook',
-  validateRequest({ body: whatsappWebhookSchema }),
-  whatsappWebhook
-);
+// Meta pega aqui una vez para verificar la URL, y despues por cada mensaje.
+// Ninguno de los dos pasa por validateRequest: un 400 haria que Meta
+// reintentara el mismo mensaje en bucle.
+router.get('/webhook', verificarWebhook);
+router.post('/webhook', recibirWebhook);
+
+// Simulador para probar el flujo sin Meta de por medio.
+router.post('/test', probarMensaje);
 
 export default router;
