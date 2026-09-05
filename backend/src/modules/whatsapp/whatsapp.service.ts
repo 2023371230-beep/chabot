@@ -4,6 +4,8 @@ import { pedidosService } from '../pedidos/pedidos.service';
 import { productosService } from '../productos/productos.service';
 import { formatCurrency, formatKg } from '../../shared/utils/format.utils';
 import { buscarProducto, interpretarFecha } from './whatsapp.matcher';
+import { clasificar, saludoPorHora } from './whatsapp.intents';
+import { configuracionService } from '../configuracion/configuracion.service';
 import { enviarMensaje, marcarComoLeido } from './whatsapp.client';
 import {
   esSoloEstados,
@@ -101,6 +103,40 @@ export const whatsappService = {
     telefono: string,
     nombrePerfil?: string
   ): Promise<{ respuesta: string; pedidoId?: string }> {
+    // 1. Filtro rapido: lo que no necesita IA se contesta al instante y con
+    //    cero costo. Solo se ataja lo que NO pide nada; ante la menor senal de
+    //    pedido pasa a la IA, porque perder una venta cuesta mas que una
+    //    peticion de mas.
+    const intencion = clasificar(texto);
+    const saludo = saludoPorHora();
+
+    if (intencion.tipo === 'saludo') {
+      return {
+        respuesta: `${saludo}! Con gusto le atiendo. Digame que corte necesita y cuantos kilos, por ejemplo: "15 kilos de pierna para manana".`
+      };
+    }
+
+    if (intencion.tipo === 'agradecimiento') {
+      return { respuesta: 'Con gusto, para servirle. Aqui andamos para lo que necesite.' };
+    }
+
+    if (intencion.tipo === 'despedida') {
+      return { respuesta: 'Gracias a usted. Que tenga buen dia.' };
+    }
+
+    if (intencion.tipo === 'catalogo') {
+      return { respuesta: await this.armarCatalogo(saludo) };
+    }
+
+    if (intencion.tipo === 'horario') {
+      return { respuesta: await this.armarHorario(saludo) };
+    }
+
+    if (intencion.tipo === 'precio') {
+      return { respuesta: await this.armarPrecio(intencion.texto, saludo) };
+    }
+
+    // 2. Solo lo que de verdad puede ser un pedido llega hasta aqui.
     let extraido;
     try {
       const salida = await aiService.extractOrderFromMessage(texto);
@@ -118,19 +154,16 @@ export const whatsappService = {
       };
     }
 
-    if (extraido.intent === 'saludo') {
+    if (!extraido.productos.length) {
       return {
-        respuesta:
-          'Que tal. Dime que necesitas y cuantos kilos, por ejemplo: "15 kilos de pierna para manana".'
+        respuesta: `${saludo}! No alcance a identificar el pedido. Digame el corte y los kilos, por ejemplo: "20 kilos de pechuga".`
       };
     }
 
-    if (extraido.intent !== 'pedido' || !extraido.productos.length) {
-      return {
-        respuesta:
-          'No alcance a identificar un pedido. Dime el corte y los kilos, por ejemplo: "20 kilos de pechuga".'
-      };
-    }
+    // "Cuanto cuesta 20 kilos de pechuga" es una COTIZACION, no un pedido.
+    // Crear el pedido aqui seria presumir que ya compro. Se cotiza y se
+    // pregunta, que ademas es como lo haria una persona en el mostrador.
+    const soloCotiza = extraido.intent === 'consulta';
 
     // 3. Traducir nombres a productos reales del catalogo.
     const catalogo = await productosService.findAll();
@@ -157,7 +190,7 @@ export const whatsappService = {
     // 4. Preguntar antes que adivinar.
     if (sinCantidad.length) {
       return {
-        respuesta: `Cuantos kilos de ${sinCantidad.join(' y ')} necesitas?`
+        respuesta: `Claro que si. Cuantos kilos de ${sinCantidad.join(' y ')} va a necesitar?`
       };
     }
 
@@ -168,7 +201,28 @@ export const whatsappService = {
       };
     }
 
-    // 5. Crear el pedido por la MISMA ruta que el dashboard.
+    // 5a. Cotizacion: se calcula el total sin crear nada.
+    if (soloCotiza) {
+      const catalogoMap = new Map(catalogo.map((p) => [p.id, p]));
+      const lineas = [`${saludo}! Le sale asi:`, ''];
+      let total = 0;
+      let kilos = 0;
+      for (const r of renglones) {
+        const prod = catalogoMap.get(r.producto_id);
+        if (!prod) continue;
+        const sub = r.kg * Number(prod.precio_kg);
+        total += sub;
+        kilos += r.kg;
+        lineas.push(`  ${formatKg(r.kg)} de ${prod.nombre} — ${formatCurrency(sub)}`);
+      }
+      lineas.push('');
+      lineas.push(`Total: ${formatKg(kilos)} — ${formatCurrency(total)}`);
+      lineas.push('');
+      lineas.push('Se lo aparto?');
+      return { respuesta: lineas.join('\n') };
+    }
+
+    // 5b. Crear el pedido por la MISMA ruta que el dashboard.
     try {
       const { pedido, warnings } = await pedidosService.createOrder({
         cliente: { telefono, nombre: nombrePerfil },
@@ -179,7 +233,7 @@ export const whatsappService = {
       });
 
       return {
-        respuesta: componerResumen(pedido, warnings, noEncontrados),
+        respuesta: componerResumen(pedido, warnings, noEncontrados, intencion.traeSaludo ? saludo : null),
         pedidoId: pedido.id
       };
     } catch (e) {
@@ -189,6 +243,45 @@ export const whatsappService = {
         respuesta: 'No pude registrar tu pedido en este momento. Intenta de nuevo en un rato.'
       };
     }
+  },
+
+  /** Catalogo con precios reales. Se arma de la base, sin IA. */
+  async armarCatalogo(saludo: string): Promise<string> {
+    const productos = (await productosService.findAll()).filter((p) => p.activo);
+    if (!productos.length) return `${saludo}. En este momento no tengo productos disponibles.`;
+
+    const lineas = [`${saludo}! Esto es lo que manejamos hoy:`, ''];
+    for (const p of productos) {
+      lineas.push(`  ${p.nombre} — ${formatCurrency(p.precio_kg)} el kilo`);
+    }
+    lineas.push('');
+    lineas.push('Digame que se lleva y cuantos kilos.');
+    return lineas.join('\n');
+  },
+
+  /**
+   * Contesta cuanto cuesta un corte. El precio esta en la base: preguntarselo
+   * a la IA seria gastar una peticion en un dato que ya tenemos, con el riesgo
+   * de que lo invente.
+   */
+  async armarPrecio(texto: string, saludo: string): Promise<string> {
+    const catalogo = await productosService.findAll();
+    const match = buscarProducto(texto, catalogo);
+
+    if (match.encontrado) {
+      const p = match.producto;
+      return `${saludo}! El kilo de ${p.nombre} esta en ${formatCurrency(p.precio_kg)}. Cuantos kilos le mando?`;
+    }
+
+    // No se identifico el corte: se manda la lista completa, que igual
+    // contesta la pregunta.
+    return this.armarCatalogo(saludo);
+  },
+
+  /** Horario desde la configuracion del negocio, sin IA. */
+  async armarHorario(saludo: string): Promise<string> {
+    const config = await configuracionService.getCurrent();
+    return `${saludo}! Atendemos de ${config.horario_apertura} a ${config.horario_cierre}. Digame en que le puedo ayudar.`;
   },
 
   async responder(telefono: string, texto: string, mensajeOrigenId?: string): Promise<void> {
@@ -238,9 +331,14 @@ const componerSinStockNi = (warnings: string[]): string[] =>
 function componerResumen(
   pedido: PedidoResumen,
   warnings: string[],
-  noEncontrados: string[]
+  noEncontrados: string[],
+  saludo: string | null
 ): string {
-  const lineas: string[] = ['Anote tu pedido:'];
+  // Si el cliente saludo, se le devuelve el saludo: cuesta cero y cambia por
+  // completo como se siente el trato.
+  const lineas: string[] = saludo
+    ? [`${saludo}! Con gusto. Le anote:`]
+    : ['Con gusto. Le anote:'];
 
   for (const d of pedido.pedido_detalles ?? []) {
     lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
@@ -255,7 +353,7 @@ function componerResumen(
 
   if (noEncontrados.length) {
     lineas.push('');
-    lineas.push(`No manejamos ${noEncontrados.join(' ni ')}, por eso no va en el pedido.`);
+    lineas.push(`Disculpe, no manejamos ${noEncontrados.join(' ni ')}, por eso no va en el pedido.`);
   }
 
   const stock = componerSinStock(warnings);
@@ -263,7 +361,7 @@ function componerResumen(
 
   if (stock.length) {
     lineas.push('');
-    lineas.push('Puede que no tengamos todo lo que pediste; te confirmamos en un momento.');
+    lineas.push('Puede que no tengamos todo lo que pidio; se lo confirmamos en un momento.');
   }
 
   if (otros.length) {
@@ -272,7 +370,7 @@ function componerResumen(
   }
 
   lineas.push('');
-  lineas.push('Queda POR CONFIRMAR. En cuanto lo confirmemos te avisamos.');
+  lineas.push('Su pedido queda POR CONFIRMAR. En cuanto lo confirmemos le avisamos.');
 
   return lineas.join('\n');
 }
