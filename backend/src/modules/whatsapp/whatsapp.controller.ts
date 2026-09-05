@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { env, isWhatsappWebhookConfigured } from '../../config/env';
 import { asyncHandler } from '../../shared/errors/asyncHandler';
 import { sendSuccess } from '../../shared/response/apiResponse';
+import { listarPendientes, reanudar } from './whatsapp.handoff';
 import { whatsappService } from './whatsapp.service';
 import type { MetaWebhookPayload } from './whatsapp.types';
 
@@ -118,4 +119,32 @@ export const probarMensaje = asyncHandler(async (req: Request, res: Response) =>
     recibidoEn: new Date()
   });
   sendSuccess(res, 'Mensaje procesado', resultado);
+});
+
+/**
+ * GET /api/whatsapp/handoffs — los chats esperando a una persona.
+ *
+ * Es lo que alimenta el badge del dashboard. Se consulta seguido, asi que
+ * devuelve solo lo necesario para pintar la lista, no el hilo completo.
+ */
+export const listarHandoffs = asyncHandler(async (_req: Request, res: Response) => {
+  const pendientes = await listarPendientes();
+  sendSuccess(res, 'Chats esperando a una persona', {
+    total: pendientes.length,
+    chats: pendientes
+  });
+});
+
+/**
+ * POST /api/whatsapp/handoffs/:telefono/reanudar — devuelve el chat al bot.
+ *
+ * Se llama cuando el asesor ya resolvio lo que el bot no podia.
+ */
+export const reanudarHandoff = asyncHandler(async (req: Request, res: Response) => {
+  const telefono = String(req.params.telefono ?? '');
+  const ok = await reanudar(telefono);
+  sendSuccess(res, ok ? 'El asistente vuelve a atender este chat' : 'No habia nada que reanudar', {
+    telefono,
+    reanudado: ok
+  });
 });

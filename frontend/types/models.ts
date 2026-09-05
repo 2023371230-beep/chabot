@@ -88,3 +88,20 @@ export type ConfiguracionEmpresa = {
   created_at: string;
   updated_at: string;
 };
+
+/**
+ * Un chat donde el asistente se detuvo a proposito y espera a una persona.
+ *
+ * `motivo` viene del backend como texto libre para que agregar un motivo nuevo
+ * alla no obligue a tocar el frontend; la interfaz lo traduce con un mapa y
+ * cae en un texto generico si no lo conoce.
+ */
+export type ChatPausado = {
+  id: string;
+  telefono: string;
+  motivo: string;
+  detalle: string | null;
+  nombreCliente: string | null;
+  pausadoEn: string;
+  ultimoMensaje: string | null;
+};

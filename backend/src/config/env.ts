@@ -18,6 +18,9 @@ export const env = {
   supabaseUrl: required('SUPABASE_URL'),
   supabaseSecretKey: required('SUPABASE_SECRET_KEY'),
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  // A donde apuntan los enlaces de las alertas. En local es el mismo
+  // frontend; en produccion es el dominio de Vercel.
+  dashboardUrl: process.env.DASHBOARD_URL ?? process.env.FRONTEND_URL ?? 'http://localhost:3000',
   groqApiKey: process.env.GROQ_API_KEY,
   groqModel: process.env.GROQ_MODEL ?? 'openai/gpt-oss-20b',
 
@@ -36,7 +39,10 @@ export const env = {
     // Secreto de la app de Meta. Sirve para verificar la firma
     // X-Hub-Signature-256 y comprobar que el webhook viene de Meta y no de
     // cualquiera que descubrio la URL de ngrok.
-    appSecret: process.env.WHATSAPP_APP_SECRET
+    appSecret: process.env.WHATSAPP_APP_SECRET,
+    // Celular del encargado, para avisarle cuando un chat necesita a una
+    // persona. Opcional: sin el, el aviso vive solo en el dashboard.
+    alertaNumero: process.env.WHATSAPP_ALERTA_NUMERO
   }
 };
 

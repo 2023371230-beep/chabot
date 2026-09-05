@@ -108,6 +108,40 @@ const TIENE_CANTIDAD =
 // ── Reglas de alto riesgo ────────────────────────────────────────────────
 
 /**
+ * Enojo abierto: groserias, acusaciones de fraude, amenazas de denuncia.
+ *
+ * Se revisa antes que nada. Un cliente insultando no quiere que le tomen el
+ * pedido, quiere que alguien le haga caso, y cada respuesta automatica mas lo
+ * enciende. "Profeco" esta en la lista a proposito: cuando alguien la nombra,
+ * el asunto ya dejo de ser un pedido.
+ */
+const ENOJO = [
+  /\b(?:pendej[oa]s?|estupid[oa]s?|idiotas?|imbecil|chinga|chingada|chinguen|verga|mierda|puto|puta|malditos?)\b/,
+  /\b(?:estafa|estafadores|ladrones|rateros|fraude|transas)\b/,
+  /\b(?:porqueria|basura|pesim[oa]|no sirven|son unos)\b/,
+  /\b(?:los voy a demandar|demanda|profeco|denuncia|abogado)\b/,
+  /\b(?:nunca mas|jamas les vuelvo|ya no les compro)\b/
+];
+
+/**
+ * Regateo, credito y facturacion.
+ *
+ * "Te compro 100 kg pero a 30 dias" o "hazme rebaja de $10 por kilo" son
+ * decisiones de administracion, no de un bot: un descuento mal dado se cobra
+ * de la utilidad y un credito mal dado no se cobra nunca. Ademas la IA, si la
+ * dejaramos, contestaria que si — los modelos son complacientes por defecto.
+ */
+const NEGOCIACION = [
+  /\b(?:descuento|rebaja|rebajame|rebajele|mas barato|mejor precio|ultimo precio|buen precio)\b/,
+  /\b(?:me lo deja[s]? en|en cuanto me lo deja|no me lo deja|hace[rme]* precio|precio especial)\b/,
+  /\b(?:fiado|fiar|me fia|credito|a plazos|abonos|abonar|pago despues|le pago despues|pagar despues)\b/,
+  /\ba (?:\d+|quince|treinta) dias\b/,
+  /\b(?:factura|facturar|facturacion|constancia fiscal|rfc)\b/,
+  /\bprecio (?:de )?(?:mayoreo|mayorista)\b/,
+  /\b(?:soy mayorista|para revender|revendo|precio especial)\b/
+];
+
+/**
  * Quejas. Se atajan ANTES que cualquier cosa que parezca pedido: un reclamo
  * que menciona kilos sigue siendo un reclamo, y contestarlo con un bot
  * alegre ("con gusto, le anote 3 kilos") es peor que no contestar.
@@ -118,6 +152,21 @@ const QUEJAS = [
   /\b(?:no me llego|nunca llego|no llego|no me lo trajeron|no lo trajeron)\b/,
   /\b(?:me cobraron|cobraron de mas|cobro de mas|reclamo|queja|devolucion|devolver|reembolso)\b/,
   /\b(?:vino mal|llego mal|salio mal|esta mal|estaba mal|mala calidad|pesimo|pesima)\b/
+];
+
+/**
+ * Entrega, direccion y formas de pago.
+ *
+ * El bot no tiene esos datos: la configuracion del negocio guarda horario y
+ * limites de mayoreo, no direccion ni terminal bancaria. Inventarlos seria la
+ * peor falla posible — mandar a un cliente a una direccion que no existe — asi
+ * que se pasa a una persona, que es quien de verdad coordina la ruta.
+ */
+const LOGISTICA = [
+  /\b(?:a domicilio|me lo llevan|lo llevan|hacen entregas|hacen envios|envian a|reparto|reparten)\b/,
+  /\b(?:donde (?:estan|se ubican|los encuentro)|su direccion|la direccion|como llego|ubicacion)\b/,
+  /\b(?:aceptan tarjeta|con tarjeta|terminal|transferencia|deposito|efectivo|como (?:les )?pago|formas de pago)\b/,
+  /\b(?:cuanto cobran (?:por )?(?:el )?envio|cobran envio|el envio cuesta)\b/
 ];
 
 const PIDE_HUMANO = [
@@ -214,7 +263,10 @@ export type IntencionRapida =
   | { tipo: 'confirmacion' }
   | { tipo: 'rechazo' }
   | { tipo: 'repetir' }
-  | { tipo: 'humano'; motivo: 'queja' | 'solicitud' }
+  | {
+      tipo: 'humano';
+      motivo: 'queja' | 'solicitud' | 'enojo' | 'negociacion' | 'logistica';
+    }
   /** Solo un numero: "20". Responde a una pregunta anterior nuestra. */
   | { tipo: 'solo_numero'; valor: number }
   | { tipo: 'demasiado_largo' }
@@ -243,8 +295,12 @@ export const clasificar = (texto: string): IntencionRapida => {
   const traeSaludo = SALUDOS.some((r) => r.test(t));
   const pideAlgo = SENALES_DE_PEDIDO.some((r) => r.test(t));
 
-  // 1. Lo que una maquina no debe contestar sola.
+  // 1. Lo que una maquina no debe contestar sola. El orden es por urgencia:
+  //    un cliente enojado no puede esperar a que se evaluen otras diez reglas.
+  if (ENOJO.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'enojo' };
   if (QUEJAS.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'queja' };
+  if (NEGOCIACION.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'negociacion' };
+  if (LOGISTICA.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'logistica' };
   if (PIDE_HUMANO.some((r) => r.test(t))) return { tipo: 'humano', motivo: 'solicitud' };
 
   // 2. Lo que la IA entenderia al reves.

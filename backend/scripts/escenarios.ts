@@ -138,6 +138,104 @@ export const ESCENARIOS: Escenario[] = [
     riesgo: 'Sin historial la IA inventa; hay que leer el ultimo pedido'
   },
 
+  // D2. Regateo, credito y facturacion: decisiones de administracion
+  {
+    grupo: 'negociacion',
+    texto: 'Te compro 100 kg pero a 30 dias',
+    espera: 'bloquea',
+    riesgo: 'La IA aprobaria el credito: los modelos dicen que si por defecto'
+  },
+  {
+    grupo: 'negociacion',
+    texto: 'hazme rebaja de $10 por kilo y te lo compro',
+    espera: 'bloquea',
+    riesgo: 'Un descuento mal dado sale de la utilidad'
+  },
+  {
+    grupo: 'negociacion',
+    texto: 'en cuanto me lo deja si llevo 50 kilos',
+    espera: 'bloquea',
+    riesgo: 'Regateo: el bot no fija precios'
+  },
+  {
+    grupo: 'negociacion',
+    texto: 'me fia hasta el viernes?',
+    espera: 'bloquea',
+    riesgo: 'Credito sin autorizar; un fiado mal dado no se cobra nunca'
+  },
+  {
+    grupo: 'negociacion',
+    texto: 'me dan factura?',
+    espera: 'bloquea',
+    riesgo: 'Facturacion es administracion, no el bot'
+  },
+  {
+    grupo: 'negociacion',
+    texto: 'cual es su precio de mayoreo',
+    espera: 'bloquea',
+    riesgo: 'Precio distinto al de catalogo: lo decide una persona'
+  },
+
+  // D3. Enojo abierto
+  {
+    grupo: 'enojo',
+    texto: 'son unos rateros, me cobraron de mas',
+    espera: 'bloquea',
+    riesgo: 'Cada respuesta automatica lo enciende mas'
+  },
+  {
+    grupo: 'enojo',
+    texto: 'que porqueria de servicio, no sirven',
+    espera: 'bloquea',
+    riesgo: 'Igual'
+  },
+  {
+    grupo: 'enojo',
+    texto: 'los voy a demandar, voy a ir a la profeco',
+    espera: 'bloquea',
+    riesgo: 'Critico: amenaza legal sin humano'
+  },
+
+  // D4. Entrega, direccion y pago: datos que el bot NO tiene
+  {
+    grupo: 'logistica',
+    texto: 'me lo llevan a domicilio?',
+    espera: 'bloquea',
+    riesgo: 'La IA inventaria una politica de envios que no existe'
+  },
+  {
+    grupo: 'logistica',
+    texto: 'donde estan ubicados?',
+    espera: 'bloquea',
+    riesgo: 'CRITICO: no hay direccion en la base, la IA la inventaria'
+  },
+  {
+    grupo: 'logistica',
+    texto: 'aceptan tarjeta?',
+    espera: 'bloquea',
+    riesgo: 'Prometer una terminal que no existe'
+  },
+  {
+    grupo: 'logistica',
+    texto: 'como les pago?',
+    espera: 'bloquea',
+    riesgo: 'Igual'
+  },
+
+  // D5. Pedidos que el stock no aguanta (se frenan en el servicio, no aqui)
+  {
+    grupo: 'pedido',
+    texto: '300 kilos de pechuga para hoy',
+    espera: 'ia',
+    riesgo: 'Debe llegar a la IA y frenarse DESPUES, al revisar el stock real'
+  },
+  {
+    grupo: 'pedido',
+    texto: 'mandame 2000 kilos de pierna',
+    espera: 'ia',
+    riesgo: 'Dedazo probable: el servicio pide confirmar antes de anotarlo'
+  },
+
   // E. Basura, abuso y limites tecnicos
   { grupo: 'basura', texto: '\u{1F44D}', espera: 'bloquea', riesgo: 'Emoji solo: la IA no extrae nada, peticion tirada' },
   { grupo: 'basura', texto: '\u{1F602}\u{1F602}\u{1F602}', espera: 'bloquea', riesgo: 'Igual' },

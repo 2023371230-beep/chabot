@@ -5,13 +5,14 @@ import {
   IconInventario,
   IconPedidos,
   IconProductos,
-  IconReportes
+  IconReportes,
+  IconWhatsapp
 } from '@/components/icons';
 
 /**
- * WhatsApp queda fuera del menu a proposito: la pantalla existe pero todavia
- * no mide nada real (el bot no esta conectado). Mostrar estado inventado es
- * peor que no mostrar nada. Se vuelve a agregar cuando el webhook funcione.
+ * WhatsApp ya esta en el menu: el bot toma pedidos de verdad, y su pestaña es
+ * donde se ven los chats que se detuvieron esperando a una persona. Lleva
+ * badge porque un chat pausado que nadie ve es un cliente abandonado.
  */
 export const navItems = [
   { href: '/dashboard', label: 'Inicio', icon: IconDashboard },
@@ -20,6 +21,7 @@ export const navItems = [
   { href: '/clientes', label: 'Clientes', icon: IconClientes },
   { href: '/inventario', label: 'Inventario', icon: IconInventario },
   { href: '/reportes', label: 'Reportes', icon: IconReportes },
+  { href: '/whatsapp', label: 'WhatsApp', icon: IconWhatsapp },
   { href: '/configuracion', label: 'Reglas', icon: IconConfiguracion }
 ];
 

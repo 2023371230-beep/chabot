@@ -1,5 +1,6 @@
 import { api } from './api-client';
 import type {
+  ChatPausado,
   Cliente,
   ConfiguracionEmpresa,
   InventarioMovimiento,
@@ -49,7 +50,15 @@ export const endpoints = {
       api.patch<ConfiguracionEmpresa>(`/configuracion/${id}`, body)
   },
   whatsapp: {
-    webhook: (body: unknown) => api.post<unknown>('/whatsapp/webhook', body)
+    webhook: (body: unknown) => api.post<unknown>('/whatsapp/webhook', body),
+    // Chats donde el asistente se detuvo y esperan a una persona.
+    handoffs: () =>
+      api.get<{ total: number; chats: ChatPausado[] }>('/whatsapp/handoffs'),
+    reanudar: (telefono: string) =>
+      api.post<{ telefono: string; reanudado: boolean }>(
+        `/whatsapp/handoffs/${encodeURIComponent(telefono)}/reanudar`,
+        {}
+      )
   },
   ai: {
     extractOrder: (body: unknown) => api.post<unknown>('/ai/extract-order', body)

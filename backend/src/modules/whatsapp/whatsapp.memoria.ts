@@ -45,6 +45,8 @@ type Conversacion = {
   preguntaKg?: { producto_id: string; nombre: string; en: number };
   ultimaRespuesta?: { texto: string; respuesta: string; en: number };
   ultimoPedido?: { firma: string; resumen: string; en: number };
+  /** Veces seguidas que el bot no entendio. */
+  fallos?: number;
 };
 
 const conversaciones = new Map<string, Conversacion>();
@@ -194,6 +196,28 @@ export const pedidoDuplicado = (telefono: string, firma: string): string | null 
 
 export const recordarPedido = (telefono: string, firma: string, resumen: string): void => {
   abrir(telefono).ultimoPedido = { firma, resumen, en: Date.now() };
+};
+
+// ── Fallos seguidos ─────────────────────────────────────────────────────
+
+/**
+ * Cuantas veces seguidas el bot no ha entendido a este cliente.
+ *
+ * Es la red final: por muchas reglas que se escriban, siempre habra una forma
+ * de escribir que no previmos. Tres "no le entendi" seguidos son la señal
+ * inequivoca de que insistir no va a funcionar, y ahi entra una persona.
+ * Sin esto el cliente se queda en un bucle educado hasta que se harta y se va.
+ */
+export const contarFallo = (telefono: string): number => {
+  const c = abrir(telefono);
+  c.fallos = (c.fallos ?? 0) + 1;
+  return c.fallos;
+};
+
+/** Cualquier mensaje bien atendido borra la cuenta: no se acumula historia. */
+export const limpiarFallos = (telefono: string): void => {
+  const c = conversaciones.get(telefono);
+  if (c) delete c.fallos;
 };
 
 /** Solo para pruebas. */

@@ -11,6 +11,7 @@ import { endpoints } from '@/lib/api/endpoints';
 import { navItems } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useHandoffs } from '@/hooks/use-handoffs';
 import { MobileMenu } from './mobile-menu';
 
 export function TopNavbar() {
@@ -19,6 +20,10 @@ export function TopNavbar() {
   const { theme, setTheme } = useTheme();
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // El sondeo vive aqui, en el navbar, porque el navbar esta montado en TODAS
+  // las pantallas: asi el aviso llega estes donde estes, no solo si tienes
+  // abierta la pestaña de WhatsApp.
+  const { total: esperando } = useHandoffs();
 
   useEffect(() => {
     let vivo = true;
@@ -56,13 +61,14 @@ export function TopNavbar() {
           {navItems.map((item) => {
             const active = pathname.startsWith(item.href);
             const Icon = item.icon;
+            const pendientes = item.href === '/whatsapp' ? esperando : 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-medium transition-colors',
+                  'relative flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-medium transition-colors',
                   active
                     ? 'bg-surface text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -70,6 +76,7 @@ export function TopNavbar() {
               >
                 <Icon className={cn(active ? 'text-primary' : 'opacity-70')} />
                 {item.label}
+                {pendientes > 0 && <Badge n={pendientes} />}
               </Link>
             );
           })}
@@ -116,15 +123,42 @@ export function TopNavbar() {
           <Button
             variant="outline"
             size="icon"
-            className="lg:hidden"
-            aria-label="Abrir menu"
+            className="relative lg:hidden"
+            aria-label={
+              esperando > 0
+                ? `Abrir menu — ${esperando} chats esperando`
+                : 'Abrir menu'
+            }
             onClick={() => setMobileOpen(true)}
           >
             <IconMenu />
+            {/* En movil el menu esta colapsado, asi que el badge de la pestaña
+                no se ve: se repite sobre el boton que si esta a la vista. */}
+            {esperando > 0 && <Badge n={esperando} />}
           </Button>
         </div>
       </div>
       <MobileMenu open={mobileOpen} onOpenChange={setMobileOpen} />
     </header>
+  );
+}
+
+/**
+ * El contador de chats esperando a una persona.
+ *
+ * Ambar con un punto rojo latiendo: el ambar se lee sin alarmar y el
+ * movimiento es lo que hace que el ojo lo encuentre sin buscarlo. El punto
+ * respeta `motion-reduce` — un parpadeo constante es justo lo que la gente
+ * con sensibilidad al movimiento desactiva.
+ */
+function Badge({ n }: { n: number }) {
+  return (
+    <span
+      className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-bold leading-none text-background"
+      title={`${n} ${n === 1 ? 'chat espera' : 'chats esperan'} a una persona`}
+    >
+      {n > 9 ? '9+' : n}
+      <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-danger motion-reduce:animate-none" />
+    </span>
   );
 }

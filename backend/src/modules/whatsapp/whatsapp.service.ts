@@ -8,8 +8,11 @@ import { buscarProducto, interpretarFecha } from './whatsapp.matcher';
 import { clasificar, saludoPorHora, MAX_CARACTERES_IA } from './whatsapp.intents';
 import { configuracionService } from '../configuracion/configuracion.service';
 import { enviarMensaje, marcarComoLeido } from './whatsapp.client';
-import { mensajeDeEspera, puedeUsarIA, registrarUso } from './whatsapp.presupuesto';
+import { puedeUsarIA, registrarUso } from './whatsapp.presupuesto';
+import { estaPausada, pausar, type MotivoHandoff } from './whatsapp.handoff';
 import {
+  contarFallo,
+  limpiarFallos,
   firmaPedido,
   olvidarCotizacion,
   pedidoDuplicado,
@@ -149,7 +152,14 @@ export const whatsappService = {
    * para que las reglas no puedan contradecirse.
    */
   async atender(texto: string, telefono: string, nombrePerfil?: string): Promise<Atencion> {
-    // 0. El cliente reenvio el mismo texto porque no vio la palomita. Se le
+    // 0. Si una persona ya tomo este chat, el bot se calla. Contestar por
+    //    debajo del asesor haria que el cliente vea dos voces distintas
+    //    diciendo cosas distintas en la misma conversacion.
+    if (await estaPausada(telefono)) {
+      return { respuesta: '' };
+    }
+
+    // 1. El cliente reenvio el mismo texto porque no vio la palomita. Se le
     //    repite lo que ya se le contesto en vez de procesarlo otra vez.
     const yaContestado = respuestaRepetida(telefono, texto);
     if (yaContestado) return { respuesta: yaContestado };
@@ -157,6 +167,30 @@ export const whatsappService = {
     const resultado = await this.decidir(texto, telefono, nombrePerfil);
     if (resultado.respuesta) recordarRespuesta(telefono, texto, resultado.respuesta);
     return resultado;
+  },
+
+  /**
+   * Pausa el bot y devuelve lo que se le dice al cliente.
+   *
+   * Todo handoff pasa por aqui para que no exista ni un solo camino que
+   * escale sin avisar al encargado.
+   */
+  async pasarAPersona(params: {
+    telefono: string;
+    motivo: MotivoHandoff;
+    detalle?: string;
+    nombrePerfil?: string;
+    texto?: string;
+  }): Promise<Atencion> {
+    limpiarFallos(params.telefono);
+    const respuesta = await pausar({
+      telefono: params.telefono,
+      motivo: params.motivo,
+      detalle: params.detalle,
+      nombreCliente: params.nombrePerfil,
+      ultimoMensaje: params.texto
+    });
+    return { respuesta };
   },
 
   async decidir(texto: string, telefono: string, nombrePerfil?: string): Promise<Atencion> {
@@ -175,13 +209,18 @@ export const whatsappService = {
         };
 
       case 'humano':
-        return { respuesta: await this.escalarAPersona(intencion.motivo, telefono) };
+        return this.pasarAPersona({
+          telefono,
+          motivo: intencion.motivo,
+          nombrePerfil,
+          texto
+        });
 
       case 'cancelacion':
         return { respuesta: await this.atenderCancelacion(telefono) };
 
       case 'modificacion':
-        return { respuesta: await this.atenderModificacion(telefono) };
+        return this.atenderModificacion(telefono, nombrePerfil, texto);
 
       case 'estado_pedido':
         return { respuesta: await this.atenderEstado(telefono) };
@@ -227,27 +266,6 @@ export const whatsappService = {
   // ── Ramas que no gastan IA ────────────────────────────────────────────
 
   /**
-   * Quejas y peticiones de hablar con alguien.
-   *
-   * Un reclamo contestado por un bot enoja mas que un reclamo sin contestar.
-   * Aqui no se intenta resolver nada: se reconoce, se deja constancia en la
-   * base para que se vea en el dashboard, y se promete una persona.
-   */
-  async escalarAPersona(motivo: 'queja' | 'solicitud', telefono: string): Promise<string> {
-    await supabase.from('mensajes_whatsapp').insert({
-      telefono,
-      mensaje: `[ATENCION] ${motivo === 'queja' ? 'Queja' : 'Pidio hablar con una persona'}`,
-      tipo: 'sistema',
-      procesado: false
-    });
-
-    if (motivo === 'queja') {
-      return 'Lamento mucho el problema. Ya pase su caso con el encargado y le contesta en un momento para resolverlo.';
-    }
-    return 'Claro que si. En un momento le contesta una persona por aqui mismo.';
-  },
-
-  /**
    * Cancelaciones.
    *
    * Solo se cancela solo lo que todavia esta PENDIENTE: ahi no se movio stock
@@ -287,22 +305,49 @@ export const whatsappService = {
    * pedido encima del de 20. Se le muestra al cliente lo que tiene y se pasa a
    * una persona.
    */
-  async atenderModificacion(telefono: string): Promise<string> {
+  async atenderModificacion(
+    telefono: string,
+    nombrePerfil?: string,
+    texto?: string
+  ): Promise<Atencion> {
     const [ultimo] = await this.pedidosDelCliente(telefono, 1);
 
     if (!ultimo) {
-      return 'No tengo ningun pedido suyo para cambiar. Digame de nuevo el corte y los kilos y se lo anoto.';
+      // Sin pedido previo no hay nada que cambiar: es un pedido nuevo mal
+      // escrito, y eso si lo puede tomar el bot.
+      return {
+        respuesta:
+          'No tengo ningun pedido suyo para cambiar. Digame de nuevo el corte y los kilos y se lo anoto.'
+      };
     }
 
-    const lineas = ['Su pedido ahorita esta asi:', ''];
-    for (const d of ultimo.pedido_detalles ?? []) {
-      lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
-    }
-    lineas.push('');
-    lineas.push(`Total: ${formatKg(ultimo.total_kg)} — ${formatCurrency(ultimo.total_precio)}`);
-    lineas.push('');
-    lineas.push('Para no equivocarme con el cambio, en un momento le contesta una persona y se lo ajusta.');
-    return lineas.join('\n');
+    const actual = (ultimo.pedido_detalles ?? [])
+      .map((d) => `${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`)
+      .join(', ');
+
+    const handoff = await this.pasarAPersona({
+      telefono,
+      motivo: 'modificacion',
+      detalle: `Pedido actual: ${actual} (${formatCurrency(ultimo.total_precio)})`,
+      nombrePerfil,
+      texto
+    });
+
+    // Se le muestra lo que tiene antes de pasarlo: asi el cliente sabe sobre
+    // que se esta hablando y el asesor no empieza de cero.
+    return {
+      respuesta: [
+        'Su pedido ahorita esta asi:',
+        '',
+        ...(ultimo.pedido_detalles ?? []).map(
+          (d) => `  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`
+        ),
+        '',
+        `Total: ${formatKg(ultimo.total_kg)} — ${formatCurrency(ultimo.total_precio)}`,
+        '',
+        handoff.respuesta
+      ].join('\n')
+    };
   },
 
   /** "Ya esta listo mi pedido?" se contesta de la base, no con IA. */
@@ -428,7 +473,16 @@ export const whatsappService = {
     const cuota = puedeUsarIA(telefono);
     if (!cuota.permitido) {
       console.warn(`[whatsapp] sin cuota de IA (${cuota.motivo}) para ${telefono}`);
-      return { respuesta: mensajeDeEspera(cuota.motivo) };
+      // Quedarse sin cuota no puede significar quedarse sin atender. Se pasa a
+      // una persona, que es exactamente lo que haria un negocio si se le
+      // descompone el sistema a media mañana.
+      return this.pasarAPersona({
+        telefono,
+        motivo: 'sin_cuota',
+        detalle: `Se agoto la cuota por ${cuota.motivo}`,
+        nombrePerfil,
+        texto
+      });
     }
 
     let extraido;
@@ -453,9 +507,7 @@ export const whatsappService = {
     }
 
     if (!extraido.productos.length) {
-      return {
-        respuesta: `${saludo}! No alcance a identificar el pedido. Digame el corte y los kilos, por ejemplo: "20 kilos de pechuga".`
-      };
+      return this.noEntendi(telefono, texto, nombrePerfil, saludo);
     }
 
     // "Cuanto cuesta 20 kilos de pechuga" es una COTIZACION, no un pedido.
@@ -510,6 +562,22 @@ export const whatsappService = {
       return { respuesta: `No manejamos ${noEncontrados.join(' ni ')}.${lista}` };
     }
 
+    // Stock imposible: el bot no puede prometer lo que no hay. Se revisa
+    // ANTES de crear nada, porque un pedido creado ya es una promesa.
+    const faltante = this.revisarStock(renglones, catalogo);
+    if (faltante.length) {
+      return this.pasarAPersona({
+        telefono,
+        motivo: 'sin_stock',
+        detalle: faltante.join('; '),
+        nombrePerfil,
+        texto
+      });
+    }
+
+    // Se entendio: se borra la cuenta de fallos seguidos.
+    limpiarFallos(telefono);
+
     const fechaEntrega = interpretarFecha(extraido.fecha_entrega) ?? undefined;
 
     if (soloCotiza) {
@@ -525,6 +593,68 @@ export const whatsappService = {
       noEncontrados,
       saludo: traeSaludo ? saludo : null
     });
+  },
+
+  /**
+   * Cuantos kilos de los pedidos no alcanzan con el stock de hoy.
+   *
+   * No se rechaza por faltar un kilo: casi siempre entra mas mercancia antes
+   * de la entrega y frenar por eso perderia ventas. Se escala solo cuando la
+   * diferencia es grande — pedir 300 kg cuando hay 40 no se resuelve con un
+   * "puede que no tengamos todo".
+   */
+  revisarStock(
+    renglones: Renglon[],
+    catalogo: Awaited<ReturnType<typeof productosService.findAll>>
+  ): string[] {
+    const porId = new Map(catalogo.map((p) => [p.id, p]));
+    const faltantes: string[] = [];
+
+    for (const r of renglones) {
+      const prod = porId.get(r.producto_id);
+      if (!prod) continue;
+      const disponible = Number(prod.stock_actual);
+      // El umbral: se escala cuando piden mas del doble de lo que hay.
+      // Debajo de eso, `createOrder` ya avisa con su warning de stock.
+      if (r.kg > disponible * 2 && r.kg - disponible > 20) {
+        faltantes.push(
+          `${prod.nombre}: piden ${formatKg(r.kg)} y hay ${formatKg(disponible)}`
+        );
+      }
+    }
+
+    return faltantes;
+  },
+
+  /**
+   * El bot no entendio.
+   *
+   * A la tercera seguida deja de intentarlo. Por muchas reglas que se
+   * escriban siempre habra una forma de escribir que no previmos, y un
+   * cliente atrapado en un bucle de "no le entendi" educado termina yendose
+   * con la competencia sin que nadie se entere.
+   */
+  async noEntendi(
+    telefono: string,
+    texto: string,
+    nombrePerfil: string | undefined,
+    saludo: string
+  ): Promise<Atencion> {
+    const seguidos = contarFallo(telefono);
+
+    if (seguidos >= 3) {
+      return this.pasarAPersona({
+        telefono,
+        motivo: 'no_entendido',
+        detalle: `${seguidos} mensajes seguidos sin entender`,
+        nombrePerfil,
+        texto
+      });
+    }
+
+    return {
+      respuesta: `${saludo}! No alcance a identificar el pedido. Digame el corte y los kilos, por ejemplo: "20 kilos de pechuga".`
+    };
   },
 
   // ── Piezas compartidas ────────────────────────────────────────────────

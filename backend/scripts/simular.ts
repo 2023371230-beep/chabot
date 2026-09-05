@@ -21,11 +21,18 @@ const BLOQUEAN = new Set([
   'solo_numero'
 ]);
 
+/** El motivo del handoff se muestra junto al tipo, que si no todos dicen "humano". */
+const detalle = (texto: string): string => {
+  const i = clasificar(texto);
+  return i.tipo === 'humano' ? `humano:${i.motivo}` : i.tipo;
+};
+
 const decision = (texto: string): { real: Espera; tipo: string } => {
   const tipo = clasificar(texto).tipo as string;
-  if (tipo === 'usar_ia') return { real: 'ia', tipo };
-  if (BLOQUEAN.has(tipo)) return { real: 'bloquea', tipo };
-  return { real: 'local', tipo };
+  const etiqueta = detalle(texto);
+  if (tipo === 'usar_ia') return { real: 'ia', tipo: etiqueta };
+  if (BLOQUEAN.has(tipo)) return { real: 'bloquea', tipo: etiqueta };
+  return { real: 'local', tipo: etiqueta };
 };
 
 const recorte = (t: string, n = 46): string =>
@@ -48,7 +55,7 @@ for (const e of ESCENARIOS) {
   else fallas.push(`  [${e.grupo}] "${recorte(e.texto, 60)}"\n      espera=${e.espera} obtuvo=${real} (${tipo})${e.riesgo ? `\n      riesgo: ${e.riesgo}` : ''}`);
 
   console.log(
-    `  ${bien ? ' OK ' : 'FALLA'}   ${e.grupo.padEnd(13)} ${tipo.padEnd(14)} ${recorte(e.texto)}`
+    `  ${bien ? ' OK ' : 'FALLA'}   ${e.grupo.padEnd(13)} ${tipo.padEnd(20)} ${recorte(e.texto)}`
   );
 }
 
