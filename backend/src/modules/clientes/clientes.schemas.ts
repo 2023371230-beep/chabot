@@ -5,8 +5,8 @@ export const clienteIdParamsSchema = z.object({
 });
 
 export const createClienteSchema = z.object({
-  nombre: z.string().trim().min(1).max(120).optional(),
-  telefono: z.string().trim().min(5).max(30),
+  nombre: z.string().trim().min(1).max(120),
+  telefono: z.string().trim().min(7).max(30),
   direccion: z.string().trim().optional(),
   notas: z.string().trim().optional()
 });
@@ -14,7 +14,7 @@ export const createClienteSchema = z.object({
 export const updateClienteSchema = z
   .object({
     nombre: z.string().trim().min(1).max(120).optional(),
-    telefono: z.string().trim().min(5).max(30).optional(),
+    telefono: z.string().trim().min(7).max(30).optional(),
     direccion: z.string().trim().optional(),
     notas: z.string().trim().optional()
   })

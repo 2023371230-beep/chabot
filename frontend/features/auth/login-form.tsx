@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, LockKeyhole } from 'lucide-react';
+import { IconCandado, IconCargando } from '@/components/icons';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/use-auth';
 
 const schema = z.object({
-  email: z.string().email('Email invalido'),
+  email: z.string().trim().email('Email invalido'),
   password: z.string().min(6, 'Minimo 6 caracteres')
 });
 
@@ -33,11 +33,16 @@ export function LoginForm() {
   const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
     try {
-      await signIn(values.email, values.password);
+      await signIn(values.email.trim().toLowerCase(), values.password);
       toast.success('Sesion iniciada');
       router.replace('/dashboard');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'No se pudo iniciar sesion');
+      const message = error instanceof Error ? error.message : 'No se pudo iniciar sesion';
+      toast.error(
+        message.toLowerCase().includes('invalid')
+          ? 'Credenciales incorrectas. Revisa email y password.'
+          : message
+      );
     } finally {
       setSubmitting(false);
     }
@@ -46,8 +51,8 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground">
-          <LockKeyhole className="h-5 w-5" />
+        <div className="mb-3 flex h-12 w-12 items-center justify-center bg-primary text-primary-foreground">
+          <IconCandado className="h-5 w-5" />
         </div>
         <CardTitle className="text-2xl">Entrar al dashboard</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -56,7 +61,7 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         {!configured ? (
-          <div className="rounded-2xl border border-warning/20 bg-warning/10 p-4 text-sm">
+          <div className="border border-warning/20 bg-warning/10 p-4 text-sm">
             Configura `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
             para habilitar el login.
           </div>
@@ -75,7 +80,7 @@ export function LoginForm() {
             ) : null}
           </div>
           <Button className="w-full" disabled={submitting || !configured}>
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {submitting ? <IconCargando className="h-4 w-4 animate-spin" /> : null}
             Iniciar sesion
           </Button>
         </form>

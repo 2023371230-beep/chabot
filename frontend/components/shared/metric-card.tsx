@@ -1,46 +1,59 @@
-import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+'use client';
+
+import type { ComponentType, SVGProps } from 'react';
+import { AnimatedNumber } from '@/components/motion';
 import { cn } from '@/lib/utils';
 
+export type MetricIcon = ComponentType<SVGProps<SVGSVGElement> & { size?: number }>;
+
+/**
+ * Ficha de metrica. Etiqueta chica arriba, cifra grande en mono abajo.
+ * El acento de color va en un filete lateral, no en un chip de icono con
+ * fondo tintado -- ese patron es el que se lee como plantilla generada.
+ */
 export function MetricCard({
   title,
   value,
   description,
   icon: Icon,
+  suffix,
+  decimals = 0,
   variant = 'default'
 }: {
   title: string;
   value: string | number;
   description?: string;
-  icon: LucideIcon;
-  variant?: 'default' | 'warning' | 'success' | 'info';
+  icon?: MetricIcon;
+  suffix?: string;
+  decimals?: number;
+  variant?: 'default' | 'warning' | 'success' | 'info' | 'danger';
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-5 md:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground">{title}</p>
-            <div className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">
-              {value}
-            </div>
-            {description ? (
-              <p className="mt-2 text-sm text-muted-foreground">{description}</p>
-            ) : null}
-          </div>
-          <div
-            className={cn(
-              'rounded-2xl p-3',
-              variant === 'default' && 'bg-accent',
-              variant === 'warning' && 'bg-warning/10 text-warning',
-              variant === 'success' && 'bg-success/10 text-success',
-              variant === 'info' && 'bg-info/10 text-info'
-            )}
-          >
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <div
+      className={cn(
+        'rounded-md border border-border bg-surface p-3 shadow-sm',
+        variant === 'warning' && 'border-l-2 border-l-warning',
+        variant === 'success' && 'border-l-2 border-l-success',
+        variant === 'info' && 'border-l-2 border-l-info',
+        variant === 'danger' && 'border-l-2 border-l-danger'
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="label">{title}</span>
+        {Icon ? <Icon className="text-muted-foreground/70" /> : null}
+      </div>
+      <div className="num mt-1.5 text-lg font-semibold leading-none">
+        {typeof value === 'number' ? (
+          <AnimatedNumber value={value} decimals={decimals} suffix={suffix} />
+        ) : (
+          value
+        )}
+      </div>
+      {description ? (
+        <p className="mt-1 text-2xs text-muted-foreground">
+          {description}
+        </p>
+      ) : null}
+    </div>
   );
 }

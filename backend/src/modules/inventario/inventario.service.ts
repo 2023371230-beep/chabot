@@ -10,6 +10,7 @@ import type {
 const MOVIMIENTOS_TABLE = 'inventario_movimientos';
 
 const stockDeltaByTipo = (tipo: string, cantidadKg: number): number => {
+  // Para el MVP, ajuste suma stock cuando la cantidad enviada es positiva.
   if (tipo === 'entrada' || tipo === 'ajuste') {
     return cantidadKg;
   }
@@ -43,6 +44,10 @@ export const inventarioService = {
     const delta = stockDeltaByTipo(input.tipo, input.cantidad_kg);
     const nuevoStock = roundMoney(toNumber(producto.stock_actual) + delta);
 
+    if ((input.tipo === 'venta' || input.tipo === 'merma') && nuevoStock < 0) {
+      throw new AppError('Stock insuficiente para realizar este movimiento.', 400);
+    }
+
     const { data, error } = await supabase
       .from(MOVIMIENTOS_TABLE)
       .insert({
@@ -72,7 +77,41 @@ export const inventarioService = {
   async createSaleMovementsForOrder(
     pedidoId: string,
     detalles: Array<{ producto_id: string; kg: number | string }>
-  ): Promise<void> {
+  ): Promise<string[]> {
+    const alreadyHasSaleMovements = await this.hasSaleMovementsForOrder(pedidoId);
+
+    if (alreadyHasSaleMovements) {
+      return ['El pedido ya tenia movimientos de venta; no se duplico inventario.'];
+    }
+
+    const grouped = new Map<string, number>();
+
+    for (const detalle of detalles) {
+      grouped.set(
+        detalle.producto_id,
+        roundMoney((grouped.get(detalle.producto_id) ?? 0) + toNumber(detalle.kg))
+      );
+    }
+
+    const products = await Promise.all(
+      Array.from(grouped.keys()).map((productoId) => productosService.findById(productoId))
+    );
+
+    for (const producto of products) {
+      const requiredKg = grouped.get(producto.id) ?? 0;
+
+      if (toNumber(producto.stock_actual) < requiredKg) {
+        throw new AppError('Stock insuficiente para realizar este movimiento.', 400, [
+          {
+            producto_id: producto.id,
+            producto: producto.nombre,
+            solicitado_kg: requiredKg,
+            disponible_kg: toNumber(producto.stock_actual)
+          }
+        ]);
+      }
+    }
+
     for (const detalle of detalles) {
       await this.createMovimiento({
         producto_id: detalle.producto_id,
@@ -82,6 +121,8 @@ export const inventarioService = {
         pedido_id: pedidoId
       });
     }
+
+    return [];
   },
 
   async hasSaleMovementsForOrder(pedidoId: string): Promise<boolean> {

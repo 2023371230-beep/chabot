@@ -6,10 +6,16 @@ export const sendSuccess = <T>(
   data?: T,
   statusCode = 200
 ): void => {
+  const warnings =
+    data && typeof data === 'object' && 'warnings' in data
+      ? (data as { warnings?: string[] }).warnings
+      : undefined;
+
   res.status(statusCode).json({
     success: true,
     message,
-    ...(data !== undefined ? { data } : {})
+    ...(data !== undefined ? { data } : {}),
+    ...(warnings?.length ? { warnings } : {})
   });
 };
 

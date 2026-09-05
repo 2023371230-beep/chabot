@@ -65,10 +65,14 @@ export const productosService = {
       })
       .eq('id', id)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new AppError('No se pudo actualizar el producto', 400, [error]);
+    }
+
+    if (!data) {
+      throw new AppError('Producto no encontrado', 404);
     }
 
     return data;

@@ -1,52 +1,64 @@
-import { TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
+import { IconAlerta, IconCheck } from '@/components/icons';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatKg } from '@/lib/formatters';
 import type { InventarioResumen } from '@/types/models';
 
 export function InventoryAlerts({ rows }: { rows: InventarioResumen[] }) {
-  const lowStock = rows.filter(
-    (row) => Number(row.stock_actual) <= Number(row.stock_minimo)
-  );
+  const bajos = rows.filter((r) => Number(r.stock_actual) <= Number(r.stock_minimo));
 
   return (
-    <Card>
+    <Card className="min-h-0 flex-1">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <TriangleAlert className="h-5 w-5 text-warning" />
-          Alertas de inventario
+        <CardTitle className="flex items-center gap-1.5">
+          {bajos.length ? (
+            <IconAlerta className="text-danger" />
+          ) : (
+            <IconCheck className="text-success" />
+          )}
+          Inventario
         </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {lowStock.length ? (
-          <div className="space-y-3">
-            {lowStock.slice(0, 5).map((item) => (
-              <div
-                key={item.producto_id}
-                className="flex items-center justify-between rounded-2xl bg-warning/10 p-3"
-              >
-                <div>
-                  <p className="font-medium">{item.nombre}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Actual {formatKg(item.stock_actual)} · minimo{' '}
-                    {formatKg(item.stock_minimo)}
-                  </p>
-                </div>
-                <Badge variant="warning">bajo</Badge>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Todo el inventario esta sobre minimo.
-          </p>
-        )}
-        <Button className="mt-4 w-full" variant="outline" asChild>
+        <Button variant="ghost" size="xs" asChild>
           <Link href="/inventario">Ver inventario</Link>
         </Button>
-      </CardContent>
+      </CardHeader>
+
+      {bajos.length ? (
+        <ul className="scroll-y min-h-0 flex-1 divide-y divide-rule">
+          {bajos.map((item) => {
+            const actual = Number(item.stock_actual);
+            const minimo = Number(item.stock_minimo);
+            // Barra relativa al minimo: muestra que tan lejos esta de cubrirlo.
+            const pct = minimo > 0 ? Math.min(100, (actual / minimo) * 100) : 0;
+            return (
+              <li key={item.producto_id} className="px-3 py-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-[13px] font-medium">{item.nombre}</span>
+                  <span className="num shrink-0 text-xs text-danger">
+                    {formatKg(actual)}
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-danger"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-2xs text-muted-foreground">
+                  Minimo {formatKg(minimo)}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-3 py-6 text-center">
+          <p className="text-xs text-muted-foreground">
+            Todos los productos estan sobre su minimo.
+          </p>
+        </div>
+      )}
     </Card>
   );
 }

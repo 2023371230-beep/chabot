@@ -1,12 +1,12 @@
-import { Bot, Brain, MessageCircle } from 'lucide-react';
+import { IconDashboard, IconWhatsapp } from '@/components/icons';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
 export function WhatsappMessagesPlaceholder() {
   const items = [
-    { icon: MessageCircle, title: 'Mensajes recientes', text: 'Preparado para listar conversaciones cuando el backend exponga GET.' },
-    { icon: Bot, title: 'Estado bot', text: 'Aqui vivira el estado de Baileys o Meta WhatsApp Cloud API.' },
-    { icon: Brain, title: 'IA Groq', text: 'El extractor ya esta preparado; falta configurar GROQ_API_KEY.' }
+    { icon: IconWhatsapp, title: 'Mensajes recientes', text: 'Preparado para listar conversaciones cuando el backend exponga GET.' },
+    { icon: IconWhatsapp, title: 'Estado bot', text: 'Aqui vivira el estado de Baileys o Meta WhatsApp Cloud API.' },
+    { icon: IconDashboard, title: 'IA Groq', text: 'El extractor ya esta preparado; falta configurar GROQ_API_KEY.' }
   ];
 
   return (
@@ -16,7 +16,7 @@ export function WhatsappMessagesPlaceholder() {
         return (
           <Card key={item.title}>
             <CardHeader>
-              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-accent">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center bg-accent">
                 <Icon className="h-5 w-5" />
               </div>
               <CardTitle>{item.title}</CardTitle>

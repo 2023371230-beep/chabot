@@ -70,17 +70,22 @@ export const clientesService = {
       })
       .eq('id', id)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new AppError('No se pudo actualizar el cliente', 400, [error]);
+    }
+
+    if (!data) {
+      throw new AppError('Cliente no encontrado', 404);
     }
 
     return data;
   },
 
   async findOrCreateFromOrder(
-    input: CreateClienteInput & { id?: string }
+    input: CreateClienteInput & { id?: string },
+    origen: 'whatsapp' | 'dashboard' | 'manual' = 'whatsapp'
   ): Promise<Cliente> {
     if (input.id) {
       return this.findById(input.id);
@@ -89,7 +94,14 @@ export const clientesService = {
     const existing = await this.findByPhone(input.telefono);
 
     if (!existing) {
-      return this.create(input);
+      if (!input.nombre?.trim() && origen !== 'whatsapp') {
+        throw new AppError('Nombre de cliente requerido para pedidos del dashboard', 400);
+      }
+
+      return this.create({
+        ...input,
+        nombre: input.nombre?.trim() || 'Cliente WhatsApp'
+      });
     }
 
     const patch: UpdateClienteInput = {};

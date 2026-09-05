@@ -1,14 +1,71 @@
+'use client';
+
+import type { ComponentType, SVGProps } from 'react';
 import {
-  Boxes,
-  ClipboardList,
-  MessageCircle,
-  PackageSearch,
-  Scale,
-  TriangleAlert
-} from 'lucide-react';
-import { MetricCard } from '@/components/shared/metric-card';
-import { formatKg } from '@/lib/formatters';
+  IconAlerta,
+  IconBascula,
+  IconCheck,
+  IconPedidos,
+  IconProductos
+} from '@/components/icons';
+import { AnimatedNumber } from '@/components/motion';
+import { cn } from '@/lib/utils';
 import type { InventarioResumen, Pedido, Producto } from '@/types/models';
+
+type Tono = 'neutro' | 'accion' | 'ok' | 'alerta';
+
+/**
+ * Tira de indicadores. Una sola fila, alto fijo: ocupa el minimo vertical
+ * posible para dejarle la pantalla a la tabla, que es lo que de verdad se
+ * consulta todo el dia.
+ *
+ * El orden es por urgencia de lectura, no alfabetico: primero lo que exige una
+ * accion hoy, al final lo que solo informa.
+ */
+function Kpi({
+  etiqueta,
+  valor,
+  sufijo,
+  nota,
+  icono: Icono,
+  tono = 'neutro'
+}: {
+  etiqueta: string;
+  valor: number | string;
+  sufijo?: string;
+  nota?: string;
+  icono: ComponentType<SVGProps<SVGSVGElement> & { size?: number }>;
+  tono?: Tono;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-surface px-3 py-2.5 shadow-sm">
+      <span
+        className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-sm',
+          tono === 'neutro' && 'bg-muted text-muted-foreground',
+          tono === 'accion' && 'bg-warning-soft text-warning',
+          tono === 'ok' && 'bg-success-soft text-success',
+          tono === 'alerta' && 'bg-danger-soft text-danger'
+        )}
+      >
+        <Icono />
+      </span>
+      <div className="min-w-0">
+        <div className="label truncate">{etiqueta}</div>
+        <div className="num mt-1 text-lg font-semibold leading-none">
+          {typeof valor === 'number' ? (
+            <AnimatedNumber value={valor} suffix={sufijo} />
+          ) : (
+            valor
+          )}
+        </div>
+        {nota ? (
+          <div className="mt-1 truncate text-2xs text-muted-foreground">{nota}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 export function DashboardKpis({
   orders,
@@ -19,45 +76,52 @@ export function DashboardKpis({
   products: Producto[];
   inventory: InventarioResumen[];
 }) {
-  const pending = orders.filter((order) => order.estado === 'pendiente').length;
-  const totalKg = orders.reduce((sum, order) => sum + Number(order.total_kg), 0);
-  const activeProducts = products.filter((product) => product.activo).length;
-  const lowStock = inventory.filter(
-    (item) => Number(item.stock_actual) <= Number(item.stock_minimo)
+  const pendientes = orders.filter((o) => o.estado === 'pendiente');
+  const confirmados = orders.filter((o) => o.estado === 'confirmado');
+  const kgComprometidos = [...pendientes, ...confirmados].reduce(
+    (s, o) => s + Number(o.total_kg),
+    0
+  );
+  const bajos = inventory.filter(
+    (i) => Number(i.stock_actual) <= Number(i.stock_minimo)
   ).length;
+  const activos = products.filter((p) => p.activo).length;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-      <MetricCard title="Pedidos totales" value={orders.length} icon={ClipboardList} />
-      <MetricCard
-        title="Pendientes"
-        value={pending}
-        icon={PackageSearch}
-        variant="warning"
+    <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+      <Kpi
+        etiqueta="Por confirmar"
+        valor={pendientes.length}
+        nota="No han tocado el stock"
+        icono={IconPedidos}
+        tono={pendientes.length ? 'accion' : 'neutro'}
       />
-      <MetricCard
-        title="Kg pedidos"
-        value={formatKg(totalKg)}
-        icon={Scale}
-        variant="info"
+      <Kpi
+        etiqueta="Stock bajo"
+        valor={bajos}
+        nota={bajos ? 'Productos bajo su minimo' : 'Todo sobre el minimo'}
+        icono={IconAlerta}
+        tono={bajos ? 'alerta' : 'ok'}
       />
-      <MetricCard
-        title="Productos activos"
-        value={activeProducts}
-        icon={Boxes}
-        variant="success"
+      <Kpi
+        etiqueta="Kilos comprometidos"
+        valor={kgComprometidos}
+        sufijo=" kg"
+        nota="Pedidos sin entregar"
+        icono={IconBascula}
       />
-      <MetricCard
-        title="Stock bajo"
-        value={lowStock}
-        icon={TriangleAlert}
-        variant={lowStock ? 'warning' : 'success'}
+      <Kpi
+        etiqueta="Confirmados"
+        valor={confirmados.length}
+        nota="Stock ya descontado"
+        icono={IconCheck}
+        tono="ok"
       />
-      <MetricCard
-        title="WhatsApp"
-        value="Preparado"
-        icon={MessageCircle}
-        description="Webhook manual listo"
+      <Kpi
+        etiqueta="Productos activos"
+        valor={activos}
+        nota={`de ${products.length} en catalogo`}
+        icono={IconProductos}
       />
     </div>
   );

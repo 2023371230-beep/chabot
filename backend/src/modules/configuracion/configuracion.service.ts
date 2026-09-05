@@ -49,10 +49,14 @@ export const configuracionService = {
       })
       .eq('id', id)
       .select('*')
-      .single();
+      .maybeSingle();
 
     if (error) {
       throw new AppError('No se pudo actualizar la configuracion', 400, [error]);
+    }
+
+    if (!data) {
+      throw new AppError('Configuracion no encontrada', 404);
     }
 
     return data;

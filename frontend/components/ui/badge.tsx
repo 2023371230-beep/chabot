@@ -2,22 +2,26 @@ import * as React from 'react';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
+/**
+ * Etiqueta de estado. Relleno tenue + texto del mismo tono: legible sin gritar
+ * dentro de una tabla densa. El color nunca es la unica senal, la palabra va
+ * escrita dentro.
+ */
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
+  'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold leading-none',
   {
     variants: {
       variant: {
-        default: 'border-transparent bg-secondary text-secondary-foreground',
-        outline: 'border-border bg-transparent',
-        success: 'border-success/20 bg-success/10 text-success',
-        warning: 'border-warning/20 bg-warning/10 text-warning',
-        danger: 'border-danger/20 bg-danger/10 text-danger',
-        info: 'border-info/20 bg-info/10 text-info'
+        default: 'bg-muted text-muted-foreground',
+        outline: 'border border-border text-muted-foreground',
+        success: 'bg-success-soft text-success',
+        warning: 'bg-warning-soft text-warning',
+        danger: 'bg-danger-soft text-danger',
+        info: 'bg-info-soft text-info',
+        solid: 'bg-foreground text-background'
       }
     },
-    defaultVariants: {
-      variant: 'default'
-    }
+    defaultVariants: { variant: 'default' }
   }
 );
 

@@ -8,6 +8,21 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
+const formatErrorMessage = <T>(payload: ApiResponse<T> | null): string => {
+  const details = payload?.errors
+    ?.map((error) => {
+      if (error && typeof error === 'object' && 'message' in error) {
+        return String((error as { message: unknown }).message);
+      }
+
+      return '';
+    })
+    .filter(Boolean);
+
+  return [payload?.message, details?.[0]].filter(Boolean).join(': ') ||
+    'No se pudo completar la solicitud';
+};
+
 class ApiClient {
   private baseUrl: string;
 
@@ -29,7 +44,7 @@ class ApiClient {
     const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
 
     if (!response.ok || !payload?.success) {
-      throw new Error(payload?.message ?? 'No se pudo completar la solicitud');
+      throw new Error(formatErrorMessage(payload));
     }
 
     return payload.data as T;

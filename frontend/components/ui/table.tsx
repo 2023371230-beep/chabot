@@ -1,31 +1,58 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * Tabla densa. Encabezado pegajoso: al scrollear una lista larga los titulos
+ * de columna se quedan a la vista, que es lo que hace usable una tabla de
+ * cientos de filas.
+ *
+ * Densidad: fila 34px, encabezado 30px -> ~22 filas visibles en 1080px.
+ */
 export function Table({ className, ...props }: React.HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="w-full overflow-auto">
-      <table className={cn('w-full caption-bottom text-sm', className)} {...props} />
-    </div>
+    <table
+      className={cn('w-full border-collapse text-[13px]', className)}
+      {...props}
+    />
   );
 }
 
-export function TableHeader({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn('[&_tr]:border-b', className)} {...props} />;
+export function TableHeader({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLTableSectionElement>) {
+  return (
+    <thead
+      className={cn('sticky top-0 z-10 bg-surface-2 [&_th]:border-b [&_th]:border-border', className)}
+      {...props}
+    />
+  );
 }
 
-export function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody className={cn('[&_tr:last-child]:border-0', className)} {...props} />;
+export function TableBody({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLTableSectionElement>) {
+  return <tbody className={className} {...props} />;
 }
 
 export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) {
-  return <tr className={cn('border-b transition-colors hover:bg-muted/40', className)} {...props} />;
+  return (
+    <tr
+      className={cn(
+        'h-[34px] border-b border-rule transition-colors last:border-b-0 hover:bg-accent/60',
+        className
+      )}
+      {...props}
+    />
+  );
 }
 
 export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
       className={cn(
-        'h-12 px-4 text-left align-middle text-xs font-medium uppercase tracking-wide text-muted-foreground',
+        'h-[30px] px-3 text-left align-middle text-2xs font-medium uppercase tracking-[0.05em] text-muted-foreground',
         className
       )}
       {...props}
@@ -34,5 +61,5 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
 }
 
 export function TableCell({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {
-  return <td className={cn('px-4 py-4 align-middle', className)} {...props} />;
+  return <td className={cn('px-3 align-middle', className)} {...props} />;
 }

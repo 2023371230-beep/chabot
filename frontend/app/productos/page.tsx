@@ -1,10 +1,12 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { IconAgregar } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/page-header';
+import { PageShell } from '@/components/layout/page-shell';
+import { ErrorState } from '@/components/shared/error-state';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +22,7 @@ import { ProductForm, type ProductFormValues } from '@/features/productos/produc
 import { ProductsTable } from '@/features/productos/products-table';
 
 export default function ProductosPage() {
-  const { data, loading, refetch } = useApi(() => endpoints.productos.list(), []);
+  const { data, loading, error, refetch } = useApi(() => endpoints.productos.list(), []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Producto | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -54,8 +56,8 @@ export default function ProductosPage() {
   };
 
   return (
-    <>
-      <PageHeader
+    <PageShell
+      fill
         title="Productos"
         description="Catalogo operativo con precio por kilogramo, stock actual y minimo."
         action={
@@ -67,7 +69,7 @@ export default function ProductosPage() {
                   setOpen(true);
                 }}
               >
-                <Plus className="h-4 w-4" />
+                <IconAgregar className="h-4 w-4" />
                 Nuevo producto
               </Button>
             </DialogTrigger>
@@ -75,23 +77,38 @@ export default function ProductosPage() {
               <DialogHeader>
                 <DialogTitle>{editing ? 'Editar producto' : 'Nuevo producto'}</DialogTitle>
                 <DialogDescription>
-                  El precio y stock se guardan en el backend y se usan para pedidos.
+                  Lo que captures aqui es lo que se usa para calcular los pedidos.
                 </DialogDescription>
               </DialogHeader>
-              <ProductForm product={editing} onSubmit={save} submitting={submitting} />
+              <ProductForm
+                product={editing}
+                onSubmit={save}
+                submitting={submitting}
+                onCancel={() => setOpen(false)}
+              />
             </DialogContent>
           </Dialog>
         }
-      />
-      <ProductsTable
-        products={products}
-        loading={loading}
-        onToggle={toggle}
-        onEdit={(product) => {
-          setEditing(product);
-          setOpen(true);
-        }}
-      />
-    </>
+    >     {error ? (
+        <ErrorState
+          title="No se pudieron cargar los productos"
+          description={error}
+          onRetry={refetch}
+        />
+      ) : null}
+      {!error ? (
+        <Card className="min-h-0 flex-1">
+        <ProductsTable
+          products={products}
+          loading={loading}
+          onToggle={toggle}
+          onEdit={(product) => {
+            setEditing(product);
+            setOpen(true);
+          }}
+        />
+        </Card>
+      ) : null}
+    </PageShell>
   );
 }

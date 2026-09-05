@@ -1,6 +1,6 @@
 'use client';
 
-import { Pencil } from 'lucide-react';
+import { IconEditar } from '@/components/icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/shared/data-table';
@@ -18,6 +18,7 @@ export function ClientsTable({
   const columns: Column<Cliente>[] = [
     {
       header: 'Cliente',
+      primary: true,
       cell: (row) => (
         <div>
           <div className="font-medium">{row.nombre ?? 'Sin nombre'}</div>
@@ -38,9 +39,16 @@ export function ClientsTable({
     {
       header: 'Acciones',
       className: 'text-right',
+      full: true,
       cell: (row) => (
-        <Button variant="ghost" size="icon" onClick={() => onEdit(row)}>
-          <Pencil className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="icon"
+          title={`Editar ${row.nombre ?? row.telefono}`}
+          aria-label={`Editar ${row.nombre ?? row.telefono}`}
+          onClick={() => onEdit(row)}
+        >
+          <IconEditar />
         </Button>
       )
     }

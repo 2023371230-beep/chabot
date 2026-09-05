@@ -8,7 +8,7 @@ export function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-4 rounded-2xl border border-border bg-card p-4">
+    <section className="space-y-4 border-2 border-border bg-card p-4">
       <div>
         <h3 className="font-semibold">{title}</h3>
         {description ? (

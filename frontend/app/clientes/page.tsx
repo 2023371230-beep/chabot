@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus } from 'lucide-react';
+import { IconAgregar } from '@/components/icons';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/page-header';
+import { PageShell } from '@/components/layout/page-shell';
+import { ErrorState } from '@/components/shared/error-state';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -20,7 +21,7 @@ import { ClientForm, type ClientFormValues } from '@/features/clientes/client-fo
 import { ClientsTable } from '@/features/clientes/clients-table';
 
 export default function ClientesPage() {
-  const { data, loading, refetch } = useApi(() => endpoints.clientes.list(), []);
+  const { data, loading, error, refetch } = useApi(() => endpoints.clientes.list(), []);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Cliente | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,8 +43,8 @@ export default function ClientesPage() {
   };
 
   return (
-    <>
-      <PageHeader
+    <PageShell
+      fill
         title="Clientes"
         description="Base de clientes para pedidos manuales, dashboard y futuros mensajes de WhatsApp."
         action={
@@ -55,7 +56,7 @@ export default function ClientesPage() {
                   setOpen(true);
                 }}
               >
-                <Plus className="h-4 w-4" />
+                <IconAgregar className="h-4 w-4" />
                 Nuevo cliente
               </Button>
             </DialogTrigger>
@@ -66,19 +67,27 @@ export default function ClientesPage() {
                   El telefono es unico y permite reconocer clientes desde WhatsApp.
                 </DialogDescription>
               </DialogHeader>
-              <ClientForm client={editing} onSubmit={save} submitting={submitting} />
+              <ClientForm
+                onCancel={() => setOpen(false)} client={editing} onSubmit={save} submitting={submitting} />
             </DialogContent>
           </Dialog>
         }
-      />
-      <ClientsTable
-        clients={data ?? []}
-        loading={loading}
-        onEdit={(client) => {
-          setEditing(client);
-          setOpen(true);
-        }}
-      />
-    </>
+    >     {error ? (
+        <ErrorState
+          title="No se pudieron cargar los clientes"
+          description={error}
+          onRetry={refetch}
+        />
+      ) : (
+        <ClientsTable
+          clients={data ?? []}
+          loading={loading}
+          onEdit={(client) => {
+            setEditing(client);
+            setOpen(true);
+          }}
+        />
+      )}
+    </PageShell>
   );
 }

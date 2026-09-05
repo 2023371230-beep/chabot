@@ -1,5 +1,6 @@
-import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import type { ComponentType, SVGProps } from 'react';
+
+export type EmptyIcon = ComponentType<SVGProps<SVGSVGElement> & { size?: number }>;
 
 export function EmptyState({
   icon: Icon,
@@ -7,23 +8,23 @@ export function EmptyState({
   description,
   action
 }: {
-  icon: LucideIcon;
+  icon?: EmptyIcon;
   title: string;
   description?: string;
   action?: React.ReactNode;
 }) {
   return (
-    <Card>
-      <CardContent className="flex flex-col items-center justify-center p-10 text-center">
-        <div className="mb-4 rounded-2xl bg-accent p-4">
-          <Icon className="h-6 w-6" />
-        </div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        {description ? (
-          <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
-        ) : null}
-        {action ? <div className="mt-5">{action}</div> : null}
-      </CardContent>
-    </Card>
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-6 py-12 text-center">
+      {Icon ? (
+        <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <Icon size={20} />
+        </span>
+      ) : null}
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {description ? (
+        <p className="mt-1 max-w-xs text-xs text-muted-foreground">{description}</p>
+      ) : null}
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { X } from 'lucide-react';
+import { IconCerrar } from '@/components/icons';
 import { navItems } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 
@@ -19,15 +19,17 @@ export function MobileMenu({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md" />
-        <Dialog.Content className="fixed inset-x-4 top-4 z-50 rounded-3xl border border-border bg-card p-6 shadow-soft">
-          <div className="mb-8 flex items-center justify-between">
-            <div className="text-sm font-semibold">Pollito Admin</div>
-            <Dialog.Close className="rounded-full p-2 hover:bg-muted">
-              <X className="h-5 w-5" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+        <Dialog.Content className="fixed inset-x-3 top-3 z-50 rounded-lg border border-border bg-surface shadow-lg">
+          <div className="flex items-center justify-between border-b border-rule px-3 py-2.5">
+            <Dialog.Title className="text-sm font-semibold">
+              Bascula
+            </Dialog.Title>
+            <Dialog.Close aria-label="Cerrar menu" className="rounded-sm p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
+              <IconCerrar />
             </Dialog.Close>
           </div>
-          <div className="grid gap-2">
+          <div className="flex flex-col">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active = pathname.startsWith(item.href);
@@ -36,12 +38,16 @@ export function MobileMenu({
                   key={item.href}
                   href={item.href}
                   onClick={() => onOpenChange(false)}
+                  aria-current={active ? 'page' : undefined}
                   className={cn(
-                    'flex items-center gap-3 rounded-2xl px-4 py-4 text-lg font-medium text-muted-foreground',
-                    active && 'bg-primary text-primary-foreground'
+                    // 44px de alto: destino tactil comodo en movil.
+                    'flex h-11 items-center gap-2.5 border-b border-rule px-3 text-[13px] font-medium last:border-b-0',
+                    active
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground'
                   )}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon />
                   {item.label}
                 </Link>
               );

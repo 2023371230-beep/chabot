@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Phone, ReceiptText } from 'lucide-react';
+import { IconCalendario, IconPedidos, IconTelefono } from '@/components/icons';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/shared/data-table';
 import { MetricCard } from '@/components/shared/metric-card';
@@ -21,9 +21,9 @@ export function OrderDetail({ order }: { order: Pedido }) {
   return (
     <div className="grid gap-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard title="Total kg" value={formatKg(order.total_kg)} icon={ReceiptText} />
-        <MetricCard title="Total" value={formatCurrency(order.total_precio)} icon={ReceiptText} variant="success" />
-        <MetricCard title="Entrega" value={formatDate(order.fecha_entrega)} icon={CalendarDays} variant="info" />
+        <MetricCard title="Total kg" value={formatKg(order.total_kg)} icon={IconPedidos} />
+        <MetricCard title="Total" value={formatCurrency(order.total_precio)} icon={IconPedidos} variant="success" />
+        <MetricCard title="Entrega" value={formatDate(order.fecha_entrega)} icon={IconCalendario} variant="info" />
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <Card>
@@ -44,7 +44,7 @@ export function OrderDetail({ order }: { order: Pedido }) {
               <p className="font-medium">{cliente?.nombre ?? 'Sin nombre'}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Phone className="h-4 w-4 text-muted-foreground" />
+              <IconTelefono className="h-4 w-4 text-muted-foreground" />
               <span>{cliente?.telefono ?? 'Sin telefono'}</span>
             </div>
             <div>
@@ -61,7 +61,7 @@ export function OrderDetail({ order }: { order: Pedido }) {
               <p className="text-sm text-muted-foreground">Notas</p>
               <p>{order.notas ?? 'Sin notas'}</p>
             </div>
-            <div className="rounded-2xl bg-muted/40 p-4 text-sm">
+            <div className="bg-muted/40 p-4 text-sm">
               <p className="font-medium">Timeline</p>
               <div className="mt-3 space-y-2 text-muted-foreground">
                 <p>Creado: {formatDate(order.created_at)}</p>

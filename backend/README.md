@@ -217,11 +217,38 @@ Inventario:
 - Crear pedido pendiente no descuenta stock.
 - Al pasar un pedido a `confirmado`, se crean movimientos tipo `venta` por cada detalle.
 - Se evita duplicar ventas verificando movimientos existentes con `pedido_id`.
-- Si no hay stock suficiente, el backend devuelve warning pero no bloquea.
+- Si no hay stock suficiente, el backend devuelve error 400 y no crea movimientos.
+- Confirmar el mismo pedido dos veces no duplica movimientos de venta.
+- No se permite que `venta` o `merma` dejen `stock_actual` negativo.
 - `entrada` aumenta `stock_actual`.
 - `venta` disminuye `stock_actual`.
 - `merma` disminuye `stock_actual`.
 - `ajuste` suma positivamente a `stock_actual` para esta version MVP.
+
+Validaciones y respuestas:
+
+- Clientes creados directamente requieren `nombre` y `telefono`.
+- Pedidos aceptan de 1 a 20 productos y cada renglon permite hasta 10000 kg.
+- Inventario acepta cantidades mayores a 0 y hasta 10000 kg.
+- Configuracion valida limite rapido positivo, preparacion de 0 a 30 dias y horarios `HH:mm` con apertura menor que cierre.
+- Errores de producto, cliente, pedido y configuracion inexistentes usan 404 cuando aplica.
+- Las respuestas exitosas pueden incluir `warnings` en formato:
+
+```json
+{
+  "success": true,
+  "message": "Pedido creado",
+  "data": {},
+  "warnings": ["Pedido mayor al limite rapido"]
+}
+```
+
+## Limitaciones actuales
+
+- Seguridad backend queda pendiente para una fase posterior.
+- No hay auth middleware, validacion JWT ni roles en backend todavia.
+- La confirmacion de pedido usa prevalidacion completa antes de descontar inventario. Para produccion se recomienda implementar una transaccion/RPC PostgreSQL; ver `sql/confirm_order_transaction.sql`.
+- WhatsApp real y Groq real siguen preparados, no integrados.
 
 ## Pruebas manuales con curl
 
@@ -290,6 +317,19 @@ curl -X PATCH http://localhost:4000/api/configuracion/REEMPLAZA_CONFIG_ID \
   -H "Content-Type: application/json" \
   -d '{"kg_limite_rapido":50,"dias_preparacion_mayoreo":3,"horario_apertura":"08:00","horario_cierre":"18:00"}'
 ```
+
+## Checklist manual MVP
+
+1. Crear cliente sin nombre debe fallar.
+2. Crear cliente con nombre valido debe pasar.
+3. Crear producto con stock 10 kg.
+4. Crear pedido de 5 kg.
+5. Confirmar pedido debe bajar stock a 5 kg.
+6. Confirmar el mismo pedido otra vez no debe duplicar venta.
+7. Crear pedido de 20 kg con stock 5 kg y confirmar debe fallar con stock insuficiente.
+8. Registrar merma mayor al stock debe fallar.
+9. Registrar entrada debe subir stock.
+10. Configuracion con horario invalido debe fallar.
 
 Webhook WhatsApp:
 

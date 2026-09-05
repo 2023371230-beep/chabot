@@ -2,8 +2,8 @@
 
 import { useParams } from 'next/navigation';
 import { PageHeader } from '@/components/layout/page-header';
+import { ErrorState } from '@/components/shared/error-state';
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton';
-import { Alert } from '@/components/ui/alert';
 import { useApi } from '@/hooks/use-api';
 import { endpoints } from '@/lib/api/endpoints';
 import { OrderDetail } from '@/features/pedidos/order-detail';
@@ -15,7 +15,13 @@ export default function PedidoDetailPage() {
 
   if (order.loading) return <LoadingSkeleton />;
   if (order.error || !order.data)
-    return <Alert>{order.error ?? 'Pedido no encontrado'}</Alert>;
+    return (
+      <ErrorState
+        title="No se pudo cargar el pedido"
+        description={order.error ?? 'Pedido no encontrado'}
+        onRetry={order.refetch}
+      />
+    );
 
   return (
     <>

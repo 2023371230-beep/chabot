@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye } from 'lucide-react';
+import { IconVer } from '@/components/icons';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/shared/data-table';
@@ -12,15 +12,20 @@ import { OrderStatusActions } from './order-status-actions';
 export function OrdersTable({
   orders,
   loading,
-  onUpdated
+  onUpdated,
+  emptyTitle = 'Sin pedidos',
+  emptyDescription = 'Crea el primero desde el boton de arriba o espera a que entre por WhatsApp.'
 }: {
   orders: Pedido[];
   loading?: boolean;
   onUpdated?: () => Promise<void> | void;
+  emptyTitle?: string;
+  emptyDescription?: string;
 }) {
   const columns: Column<Pedido>[] = [
     {
       header: 'Cliente',
+      primary: true,
       cell: (row) => (
         <div>
           <div className="font-medium">
@@ -39,11 +44,17 @@ export function OrdersTable({
     {
       header: 'Acciones',
       className: 'text-right',
+      full: true,
       cell: (row) => (
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" size="icon" asChild>
-            <Link href={`/pedidos/${row.id}`}>
-              <Eye className="h-4 w-4" />
+          <Button variant="ghost" size="sm" asChild>
+            <Link
+              href={`/pedidos/${row.id}`}
+              title="Ver el detalle del pedido"
+              aria-label={`Ver detalle del pedido de ${row.clientes?.nombre ?? 'cliente'}`}
+            >
+              <IconVer />
+              <span className="hidden sm:inline">Ver</span>
             </Link>
           </Button>
           <OrderStatusActions order={row} onUpdated={onUpdated} />
@@ -57,8 +68,8 @@ export function OrdersTable({
       data={orders}
       columns={columns}
       loading={loading}
-      emptyTitle="Sin pedidos"
-      emptyDescription="Crea el primer pedido desde el dashboard o desde WhatsApp."
+      emptyTitle={emptyTitle}
+      emptyDescription={emptyDescription}
     />
   );
 }

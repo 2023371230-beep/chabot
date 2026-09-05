@@ -15,33 +15,38 @@ export const pedidoIdParamsSchema = z.object({
 
 const pedidoProductoSchema = z.object({
   producto_id: z.string().uuid(),
-  kg: z.number().gt(0)
+  kg: z.number().gt(0).max(10000)
 });
+
+const fechaEntregaSchema = z
+  .string()
+  .date('Fecha de entrega invalida')
+  .optional();
 
 export const createPedidoSchema = z.object({
   cliente: z
     .object({
       id: z.string().uuid().optional(),
       nombre: z.string().trim().min(1).max(120).optional(),
-      telefono: z.string().trim().min(5).max(30),
+      telefono: z.string().trim().min(7).max(30),
       direccion: z.string().trim().optional(),
       notas: z.string().trim().optional()
     })
     .refine((cliente) => cliente.id || cliente.telefono, {
       message: 'Debe enviar cliente.id o cliente.telefono'
     }),
-  fecha_entrega: z.string().date().optional(),
+  fecha_entrega: fechaEntregaSchema,
   origen: pedidoOrigenSchema.optional(),
   notas: z.string().trim().optional(),
-  productos: z.array(pedidoProductoSchema).min(1)
+  productos: z.array(pedidoProductoSchema).min(1).max(20)
 });
 
 export const updatePedidoSchema = z
   .object({
-    fecha_entrega: z.string().date().optional(),
+    fecha_entrega: fechaEntregaSchema,
     estado: pedidoEstadoSchema.optional(),
     notas: z.string().trim().optional(),
-    productos: z.array(pedidoProductoSchema).min(1).optional()
+    productos: z.array(pedidoProductoSchema).min(1).max(20).optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Debe enviar al menos un campo para actualizar'

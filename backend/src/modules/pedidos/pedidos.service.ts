@@ -101,6 +101,47 @@ const calculateOrder = async (
   return { detalles, totalKg, totalPrecio, stockWarnings };
 };
 
+const validateDetailsForConfirmation = async (
+  detalles: PedidoDetalle[]
+): Promise<void> => {
+  if (!detalles.length) {
+    throw new AppError('El pedido no tiene productos para confirmar', 400);
+  }
+
+  const grouped = new Map<string, number>();
+
+  for (const detalle of detalles) {
+    grouped.set(
+      detalle.producto_id,
+      roundMoney((grouped.get(detalle.producto_id) ?? 0) + toNumber(detalle.kg))
+    );
+  }
+
+  const productos = await getProductosByIds(Array.from(grouped.keys()));
+  const productMap = new Map(productos.map((producto) => [producto.id, producto]));
+
+  for (const [productoId, kg] of grouped) {
+    const producto = productMap.get(productoId);
+
+    if (!producto) {
+      throw new AppError(`Producto no encontrado: ${productoId}`, 404);
+    }
+
+    const stockActual = toNumber(producto.stock_actual);
+
+    if (stockActual < kg) {
+      throw new AppError('Stock insuficiente para realizar este movimiento.', 400, [
+        {
+          producto_id: productoId,
+          producto: producto.nombre,
+          solicitado_kg: kg,
+          disponible_kg: stockActual
+        }
+      ]);
+    }
+  }
+};
+
 const buildBusinessWarnings = async (
   totalKg: number,
   fechaEntrega?: string
@@ -159,7 +200,8 @@ export const pedidosService = {
   },
 
   async createOrder(input: CreatePedidoInput) {
-    const cliente = await clientesService.findOrCreateFromOrder(input.cliente);
+    const origen = input.origen ?? 'whatsapp';
+    const cliente = await clientesService.findOrCreateFromOrder(input.cliente, origen);
     const calculated = await calculateOrder(input.productos);
     const business = await buildBusinessWarnings(calculated.totalKg, input.fecha_entrega);
 
@@ -169,7 +211,7 @@ export const pedidosService = {
         cliente_id: cliente.id,
         fecha_entrega: input.fecha_entrega,
         estado: 'pendiente',
-        origen: input.origen ?? 'whatsapp',
+        origen,
         notas: input.notas,
         total_kg: calculated.totalKg,
         total_precio: calculated.totalPrecio
@@ -295,6 +337,14 @@ export const pedidosService = {
       throw new AppError('No se puede confirmar o completar un pedido cancelado', 400);
     }
 
+    if (pedido.estado === 'cancelado' && estado !== 'cancelado') {
+      throw new AppError('No se puede cambiar el estado de un pedido cancelado', 400);
+    }
+
+    if (pedido.estado === 'completado' && estado !== 'completado') {
+      throw new AppError('No se puede cambiar el estado de un pedido completado', 400);
+    }
+
     const detalles = (pedido.pedido_detalles ?? []) as PedidoDetalle[];
     const warnings: string[] = [];
 
@@ -302,25 +352,11 @@ export const pedidosService = {
       const alreadyHasSaleMovements =
         await inventarioService.hasSaleMovementsForOrder(id);
 
-      if (!alreadyHasSaleMovements) {
-        const productos = await getProductosByIds(
-          detalles.map((detalle) => detalle.producto_id)
-        );
-        const productMap = new Map(productos.map((producto) => [producto.id, producto]));
-
-        for (const detalle of detalles) {
-          const producto = productMap.get(detalle.producto_id);
-          const stockActual = toNumber(producto?.stock_actual);
-          const kg = toNumber(detalle.kg);
-
-          if (producto && stockActual < kg) {
-            warnings.push(
-              `Stock bajo para ${producto.nombre}: confirmado ${kg} kg, disponible ${stockActual} kg.`
-            );
-          }
-        }
-
-        await inventarioService.createSaleMovementsForOrder(id, detalles);
+      if (alreadyHasSaleMovements) {
+        warnings.push('El pedido ya tenia movimientos de venta; no se duplico inventario.');
+      } else {
+        await validateDetailsForConfirmation(detalles);
+        warnings.push(...(await inventarioService.createSaleMovementsForOrder(id, detalles)));
       }
     }
 

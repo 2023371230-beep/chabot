@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/page-header';
+import { PageShell } from '@/components/layout/page-shell';
+import { ErrorState } from '@/components/shared/error-state';
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { endpoints } from '@/lib/api/endpoints';
@@ -14,6 +15,15 @@ export default function ConfiguracionPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (config.loading) return <LoadingSkeleton />;
+  if (config.error) {
+    return (
+      <ErrorState
+        title="No se pudo cargar la configuracion"
+        description={config.error}
+        onRetry={config.refetch}
+      />
+    );
+  }
   if (!config.data) return null;
   const currentConfig = config.data;
 
@@ -31,12 +41,11 @@ export default function ConfiguracionPage() {
   };
 
   return (
-    <>
-      <PageHeader
+    <PageShell
+      fill
         title="Configuracion"
         description="Reglas operativas que el backend usa para advertencias de mayoreo y fuera de horario."
-      />
-      <Card>
+    >     <Card>
         <CardHeader>
           <CardTitle>Reglas de negocio</CardTitle>
         </CardHeader>
@@ -44,6 +53,6 @@ export default function ConfiguracionPage() {
           <ConfigurationForm config={currentConfig} onSubmit={save} submitting={submitting} />
         </CardContent>
       </Card>
-    </>
+    </PageShell>
   );
 }

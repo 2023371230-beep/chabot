@@ -2,67 +2,168 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   BASCULA — Panel de operacion
+   --------------------------------------------------------------------------
+   Estilo: Data-Dense Dashboard. Densidad alta, rejilla, cero espacio muerto.
+   Color: grafito + ambar. Se evita a proposito el azul #1E40AF que traen por
+   defecto todas las plantillas de dashboard.
+   Semantica: verde = confirmado/ok, ambar = requiere accion, rojo = problema.
+   ========================================================================== */
+
 @layer base {
   :root {
-    --font-geist-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --background: 43 41% 95%;
-    --foreground: 0 0% 10%;
+    --font-ui:  var(--font-ui-next),  ui-sans-serif, system-ui, sans-serif;
+    --font-num: var(--font-num-next), ui-monospace, monospace;
+
+    /* --- superficies: gris calido, no azulado --- */
+    --background: 40 14% 96%;
+    --surface: 0 0% 100%;
+    --surface-2: 40 12% 93%;
+    --foreground: 30 8% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 10%;
-    --primary: 47 96% 77%;
-    --primary-foreground: 0 0% 10%;
-    --secondary: 42 25% 92%;
-    --secondary-foreground: 0 0% 10%;
-    --muted: 42 25% 92%;
-    --muted-foreground: 0 0% 45%;
-    --accent: 49 100% 90%;
-    --accent-foreground: 0 0% 10%;
-    --border: 40 26% 88%;
-    --input: 40 26% 88%;
-    --ring: 45 92% 57%;
-    --success: 160 84% 39%;
-    --warning: 38 92% 50%;
-    --danger: 0 84% 60%;
-    --info: 217 91% 60%;
+    --card-foreground: 30 8% 12%;
+
+    --muted: 40 12% 93%;
+    --muted-foreground: 32 6% 42%;
+    --secondary: 40 12% 93%;
+    --secondary-foreground: 30 8% 12%;
+    --accent: 40 14% 90%;
+    --accent-foreground: 30 8% 12%;
+
+    --border: 36 10% 85%;
+    --rule: 36 10% 89%;
+    --input: 36 10% 82%;
+    --ring: 32 92% 44%;
+
+    /* --- marca: ambar quemado, no amarillo pastel --- */
+    --primary: 30 90% 46%;
+    --primary-foreground: 0 0% 100%;
+
+    /* --- semanticos, todos AA sobre superficie clara --- */
+    --success: 154 62% 27%;    --success-soft: 154 44% 92%;
+    --warning: 32 88% 38%;     --warning-soft: 38 90% 92%;
+    --danger: 358 68% 45%;     --danger-soft: 356 76% 95%;
+    --info: 210 68% 38%;       --info-soft: 208 80% 94%;
+    --on-danger: 0 0% 100%;
+
+    --shadow-1: 0 1px 2px hsl(30 10% 12% / 0.06), 0 1px 1px hsl(30 10% 12% / 0.04);
+    --shadow-2: 0 2px 4px hsl(30 10% 12% / 0.07), 0 4px 12px hsl(30 10% 12% / 0.06);
+    --shadow-3: 0 8px 24px hsl(30 10% 12% / 0.12);
+
+    --r-xs: 4px;
+    --r-sm: 6px;
+    --r-md: 8px;
+    --r-lg: 12px;
+
+    /* Alturas fijas del chrome. El area de contenido se calcula con ellas
+       para que SIEMPRE llene la ventana exacta y no sobre pantalla. */
+    --h-topbar: 60px;
+    --h-pagebar: 60px;
   }
 
   .dark {
-    --background: 0 0% 7%;
-    --foreground: 33 57% 90%;
-    --card: 0 0% 11%;
-    --card-foreground: 33 57% 90%;
-    --primary: 43 96% 65%;
-    --primary-foreground: 0 0% 10%;
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 33 57% 90%;
-    --muted: 0 0% 14%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 43 41% 12%;
-    --accent-foreground: 33 57% 90%;
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 43 96% 65%;
-    --success: 158 64% 52%;
-    --warning: 43 96% 56%;
-    --danger: 0 91% 71%;
-    --info: 213 94% 68%;
+    --background: 30 8% 9%;
+    --surface: 30 8% 12%;
+    --surface-2: 30 7% 16%;
+    /* 87% de luminosidad, no blanco puro: sobre fondo oscuro el blanco a tope
+       dispersa y engorda los contornos de la letra (halacion). */
+    --foreground: 40 16% 87%;
+    --card: 30 8% 12%;
+    --card-foreground: 40 16% 92%;
+
+    --muted: 30 7% 16%;
+    --muted-foreground: 36 8% 60%;
+    --secondary: 30 7% 16%;
+    --secondary-foreground: 40 16% 92%;
+    --accent: 30 7% 20%;
+    --accent-foreground: 40 16% 92%;
+
+    --border: 30 6% 26%;
+    --rule: 30 6% 20%;
+    --input: 30 6% 30%;
+    --ring: 34 92% 56%;
+
+    --primary: 32 92% 52%;
+    --primary-foreground: 30 20% 8%;
+
+    --success: 152 52% 52%;    --success-soft: 154 30% 16%;
+    --warning: 36 88% 58%;     --warning-soft: 36 40% 16%;
+    --danger: 358 76% 64%;     --danger-soft: 358 36% 18%;
+    --info: 208 76% 62%;       --info-soft: 208 34% 17%;
+    --on-danger: 30 20% 8%;
+
+    --shadow-1: 0 1px 2px hsl(0 0% 0% / 0.4);
+    --shadow-2: 0 2px 4px hsl(0 0% 0% / 0.4), 0 4px 12px hsl(0 0% 0% / 0.3);
+    --shadow-3: 0 8px 24px hsl(0 0% 0% / 0.5);
   }
 
   * {
     @apply border-border;
   }
 
+  html,
+  body {
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    /* El shell controla su propio scroll: cada region scrollea por dentro. */
+    overflow: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: var(--r-xs);
   }
 }
 
 @layer components {
-  .page-shell {
-    @apply mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-6 lg:px-8;
+  /* Cifras: tabulares para que ninguna columna tiemble al actualizarse. */
+  .num {
+    font-family: var(--font-num);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'zero' 1;
   }
 
-  .premium-card {
-    @apply rounded-2xl border border-border/80 bg-card text-card-foreground shadow-soft;
+  /* Etiqueta chica de encabezado de dato. */
+  .label {
+    @apply text-[11px] font-medium uppercase leading-none tracking-[0.06em] text-muted-foreground;
+  }
+
+  /* Region que scrollea por dentro sin arrastrar la pagina completa. */
+  .scroll-y {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .scroll-y::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  /* Ley de Fitts: en pantalla tactil el area de impacto sube a 44px sin
+     alterar el tamano visual del control. El :where mantiene baja la
+     especificidad para que cualquier clase util lo pueda sobrescribir. */
+  @media (pointer: coarse) {
+    :where(button, a[href], [role='button'], input, select, textarea) {
+      min-height: 44px;
+    }
+
+    :where(button, a[href], [role='button']) {
+      touch-action: manipulation;
+    }
+  }
+
+  .scroll-y::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 99px;
   }
 }

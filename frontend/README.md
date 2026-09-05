@@ -92,6 +92,27 @@ Para crear un admin, usa Supabase Auth desde el panel de Supabase: Authenticatio
 
 El layout usa navbar superior centrado, sin sidebar. La paleta combina crema, blanco, negro suave, grises limpios y amarillo pastel como acento. Incluye dark mode con `next-themes`, cards con bordes sutiles, tablas respirables, badges de estado y formularios en dialogs.
 
+## Cambios de estabilizacion MVP
+
+- Las paginas principales muestran loading, error persistente con reintento y empty state solo cuando no hay error.
+- Las tablas compartidas tienen scroll horizontal en movil y evitan usar el indice como key cuando existe `id`.
+- Login normaliza `email.trim().toLowerCase()` antes de autenticar.
+- Formularios alineados con backend:
+  - Cliente requiere nombre y telefono.
+  - Pedido permite maximo 20 productos y hasta 10000 kg por renglon.
+  - Inventario permite cantidades mayores a 0 y hasta 10000 kg.
+  - Configuracion valida horarios `HH:mm`, apertura distinta y menor que cierre.
+- Al crear un pedido con advertencias, se muestra alerta amarilla visible en la pagina.
+- Si backend responde stock insuficiente, el modal/formulario no se cierra ni se resetea automaticamente.
+
+## Pruebas manuales sugeridas
+
+1. Dashboard debe mostrar error si backend esta apagado.
+2. Tablas deben verse bien en movil con scroll horizontal.
+3. Login debe funcionar aunque el email tenga espacios alrededor.
+4. Pedido mayor al limite debe mostrar warning visible.
+5. Configuracion con horario invalido debe fallar.
+
 ## Endpoints consumidos
 
 - `GET /api/health`
@@ -116,6 +137,7 @@ El layout usa navbar superior centrado, sin sidebar. La paleta combina crema, bl
 
 ## Siguiente etapa
 
+- Seguridad backend: auth middleware, JWT, roles, rate limiting, CORS produccion y RLS final.
 - WhatsApp real con Baileys o Meta WhatsApp Cloud API.
 - Groq real con `GROQ_API_KEY` en backend.
 - Reportes PDF.

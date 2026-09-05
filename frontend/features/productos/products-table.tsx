@@ -20,6 +20,7 @@ export function ProductsTable({
   const columns: Column<Producto>[] = [
     {
       header: 'Producto',
+      primary: true,
       cell: (row) => (
         <div>
           <div className="font-medium">{row.nombre}</div>
@@ -53,6 +54,7 @@ export function ProductsTable({
     {
       header: 'Acciones',
       className: 'text-right',
+      full: true,
       cell: (row) => (
         <ProductActions product={row} onEdit={onEdit} onToggle={onToggle} />
       )

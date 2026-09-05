@@ -1,37 +1,48 @@
+'use client';
+
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
+  [
+    'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap',
+    'rounded-sm text-[13px] font-medium',
+    'transition-[background-color,border-color,color,box-shadow] duration-150',
+    'focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45',
+    'active:translate-y-px'
+  ].join(' '),
   {
     variants: {
       variant: {
-        default: 'bg-foreground text-background hover:bg-foreground/85',
-        primary: 'bg-primary text-primary-foreground hover:bg-primary/85',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        outline: 'border border-border bg-card hover:bg-accent',
-        danger: 'bg-danger text-white hover:bg-danger/90'
+        default: 'bg-foreground text-background hover:opacity-90',
+        primary:
+          'bg-primary text-primary-foreground shadow-sm hover:brightness-110',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-accent',
+        ghost: 'text-muted-foreground hover:bg-accent hover:text-foreground',
+        outline:
+          'border border-input bg-surface text-foreground shadow-sm hover:bg-accent',
+        danger: 'bg-danger text-on-danger shadow-sm hover:brightness-110',
+        'danger-soft':
+          'border border-danger/25 bg-danger-soft text-danger hover:border-danger/50',
+        'success-soft':
+          'border border-success/25 bg-success-soft text-success hover:border-success/50'
       },
       size: {
-        sm: 'h-9 px-3',
-        md: 'h-10 px-4',
-        lg: 'h-11 px-5',
-        icon: 'h-10 w-10'
+        xs: 'h-6 px-2 text-xs',
+        sm: 'h-7 px-2.5',
+        md: 'h-8 px-3',
+        lg: 'h-9 px-4 text-sm',
+        icon: 'h-8 w-8 px-0'
       }
     },
-    defaultVariants: {
-      variant: 'default',
-      size: 'md'
-    }
+    defaultVariants: { variant: 'default', size: 'md' }
   }
 );
 
 export interface ButtonProps
-  extends
-    React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }

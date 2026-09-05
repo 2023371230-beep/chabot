@@ -23,3 +23,8 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Skills de terceros instaladas localmente (no son codigo del proyecto)
+.claude/skills/
+skills-lock.json
+frontend/tsconfig.tsbuildinfo

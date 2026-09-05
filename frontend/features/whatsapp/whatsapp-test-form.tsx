@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, Send } from 'lucide-react';
+import { IconCargando, IconEnviar } from '@/components/icons';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -60,11 +60,11 @@ export function WhatsappTestForm() {
         {errors.mensaje ? <p className="text-xs text-danger">{errors.mensaje.message}</p> : null}
       </div>
       <Button disabled={submitting} className="justify-self-end">
-        {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        {submitting ? <IconCargando className="h-4 w-4 animate-spin" /> : <IconEnviar className="h-4 w-4" />}
         Enviar prueba
       </Button>
       {response ? (
-        <pre className="max-h-72 overflow-auto rounded-2xl bg-muted p-4 text-xs">
+        <pre className="max-h-72 overflow-auto bg-muted p-4 text-xs">
           {JSON.stringify(response, null, 2)}
         </pre>
       ) : null}

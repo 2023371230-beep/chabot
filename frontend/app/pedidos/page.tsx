@@ -1,9 +1,10 @@
 'use client';
 
-import { Plus, Search } from 'lucide-react';
+import { IconAgregar, IconBuscar } from '@/components/icons';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/layout/page-header';
+import { PageShell } from '@/components/layout/page-shell';
+import { ErrorState } from '@/components/shared/error-state';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Alert } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -35,9 +37,11 @@ export default function PedidosPage() {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [pageWarnings, setPageWarnings] = useState<string[]>([]);
   const [status, setStatus] = useState<PedidoEstado | 'todos'>('todos');
   const [query, setQuery] = useState('');
   const [date, setDate] = useState('');
+  const error = orders.error ?? products.error ?? clients.error;
 
   const filteredOrders = useMemo(() => {
     return (orders.data ?? []).filter((order) => {
@@ -53,30 +57,33 @@ export default function PedidosPage() {
   const create = async (payload: unknown) => {
     setSubmitting(true);
     setWarnings([]);
+    setPageWarnings([]);
     try {
       const result = await endpoints.pedidos.create(payload);
       setWarnings(result.warnings ?? []);
+      setPageWarnings(result.warnings ?? []);
       result.warnings?.forEach((warning) => toast.warning(warning));
-      toast.success('Pedido creado');
+      toast.success(result.warnings?.length ? 'Pedido creado con advertencia' : 'Pedido creado');
       setOpen(false);
       await orders.refetch();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo crear pedido');
+      throw error;
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <>
-      <PageHeader
+    <PageShell
+      fill
         title="Pedidos"
         description="Control de pedidos por kilogramo con estados e impacto de inventario al confirmar."
         action={
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4" />
+              <Button onClick={() => setWarnings([])}>
+                <IconAgregar className="h-4 w-4" />
                 Nuevo pedido
               </Button>
             </DialogTrigger>
@@ -88,6 +95,7 @@ export default function PedidosPage() {
                 </DialogDescription>
               </DialogHeader>
               <OrderForm
+                onCancel={() => setOpen(false)}
                 clients={clients.data ?? []}
                 products={(products.data ?? []).filter((p) => p.activo)}
                 warnings={warnings}
@@ -97,11 +105,28 @@ export default function PedidosPage() {
             </DialogContent>
           </Dialog>
         }
-      />
-
-      <div className="mb-4 grid gap-3 rounded-2xl border border-border bg-card p-3 md:grid-cols-[1fr_200px_200px]">
+    >      {error ? (
+        <ErrorState
+          title="No se pudieron cargar los pedidos"
+          description={error}
+          onRetry={async () => {
+            await Promise.all([orders.refetch(), products.refetch(), clients.refetch()]);
+          }}
+        />
+      ) : (
+        <>
+      {pageWarnings.length ? (
+        <Alert className="mb-4">
+          <ul className="list-disc space-y-1 pl-4">
+            {pageWarnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </Alert>
+      ) : null}
+      <div className="mb-4 grid gap-3 border-2 border-border bg-card p-3 md:grid-cols-[1fr_200px_200px]">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <IconBuscar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
             placeholder="Buscar cliente o telefono"
@@ -133,6 +158,8 @@ export default function PedidosPage() {
         loading={orders.loading}
         onUpdated={orders.refetch}
       />
-    </>
+        </>
+      )}
+    </PageShell>
   );
 }
