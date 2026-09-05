@@ -1,5 +1,11 @@
 # 🐥 Báscula — Documentación del proyecto
 
+> **Documentos hermanos**
+> [DESPLIEGUE.md](DESPLIEGUE.md) — subirlo a Vercel paso a paso
+> [LOGIN.md](LOGIN.md) — crear tu usuario y encender la autenticación
+> [AUDITORIA-UI.md](AUDITORIA-UI.md) — qué se revisó de la interfaz y qué falla
+> [MEJORAS-UI.md](MEJORAS-UI.md) — qué funciona pero cuesta, y qué cambiaría
+
 > Sistema de pedidos para una distribuidora avícola, con dashboard web y
 > chatbot de WhatsApp.
 >

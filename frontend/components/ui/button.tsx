@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 const buttonVariants = cva(
   [
     'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap',
-    'rounded-sm text-[13px] font-medium',
+    'rounded-sm text-sm font-medium',
     'transition-[background-color,border-color,color,box-shadow] duration-150',
     'focus-visible:outline-none disabled:pointer-events-none disabled:opacity-45',
     'active:translate-y-px'
@@ -29,12 +29,15 @@ const buttonVariants = cva(
         'success-soft':
           'border border-success/25 bg-success-soft text-success hover:border-success/50'
       },
+      // Alturas subidas junto con la escala tipografica: con la letra a 15-16px
+      // los 28px de antes apretaban el texto contra el borde. `md` queda en
+      // 36px, por encima de los 32 que se recomiendan para puntero de raton.
       size: {
-        xs: 'h-6 px-2 text-xs',
-        sm: 'h-7 px-2.5',
-        md: 'h-8 px-3',
-        lg: 'h-9 px-4 text-sm',
-        icon: 'h-8 w-8 px-0'
+        xs: 'h-7 px-2 text-xs',
+        sm: 'h-8 px-3',
+        md: 'h-9 px-3.5',
+        lg: 'h-10 px-4 text-sm',
+        icon: 'h-9 w-9 px-0'
       }
     },
     defaultVariants: { variant: 'default', size: 'md' }

@@ -200,7 +200,7 @@ export default function ReportesPage() {
                 <ul className="scroll-y flex min-h-0 flex-1 flex-col divide-y divide-rule">
                   {d.productos.slice(0, 8).map((f) => (
                     <li key={f.nombre} className="flex items-center gap-3 px-3 py-2">
-                      <span className="w-24 shrink-0 truncate text-[13px] font-medium">
+                      <span className="w-24 shrink-0 truncate text-sm font-medium">
                         {f.nombre}
                       </span>
                       <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
@@ -216,7 +216,7 @@ export default function ReportesPage() {
                       <span className="num w-20 shrink-0 text-right text-xs text-muted-foreground">
                         {formatKg(f.kg)}
                       </span>
-                      <span className="num w-24 shrink-0 text-right text-[13px] font-medium">
+                      <span className="num w-24 shrink-0 text-right text-sm font-medium">
                         {formatCurrency(f.ingreso)}
                       </span>
                     </li>
@@ -242,13 +242,13 @@ export default function ReportesPage() {
                       className="flex items-center justify-between gap-3 px-3 py-2"
                     >
                       <div className="min-w-0">
-                        <div className="truncate text-[13px] font-medium">{c.nombre}</div>
+                        <div className="truncate text-sm font-medium">{c.nombre}</div>
                         <div className="num truncate text-2xs text-muted-foreground">
                           {c.telefono}
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        <div className="num text-[13px] font-medium">
+                        <div className="num text-sm font-medium">
                           {formatCurrency(c.ingreso)}
                         </div>
                         <div className="text-2xs text-muted-foreground">

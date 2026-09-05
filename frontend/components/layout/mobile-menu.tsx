@@ -41,7 +41,7 @@ export function MobileMenu({
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     // 44px de alto: destino tactil comodo en movil.
-                    'flex h-11 items-center gap-2.5 border-b border-rule px-3 text-[13px] font-medium last:border-b-0',
+                    'flex h-11 items-center gap-2.5 border-b border-rule px-3 text-sm font-medium last:border-b-0',
                     active
                       ? 'bg-primary text-primary-foreground'
                       : 'text-muted-foreground'

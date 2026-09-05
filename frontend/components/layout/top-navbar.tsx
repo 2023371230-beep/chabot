@@ -49,7 +49,7 @@ export function TopNavbar() {
           que marca y acciones midan lo mismo. */}
       <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-3 px-3 lg:px-4">
         <Link href="/dashboard" className="flex items-center gap-2 justify-self-start">
-          <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary text-[13px] font-bold text-primary-foreground">
+          <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary text-sm font-bold text-primary-foreground">
             B
           </span>
           <span className="hidden text-sm font-semibold tracking-tight sm:block">
@@ -68,7 +68,7 @@ export function TopNavbar() {
                 href={item.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-[13px] font-medium transition-colors',
+                  'relative flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium transition-colors',
                   active
                     ? 'bg-surface text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -154,7 +154,7 @@ export function TopNavbar() {
 function Badge({ n }: { n: number }) {
   return (
     <span
-      className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-bold leading-none text-background"
+      className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-warning px-1 text-2xs font-bold leading-none text-background"
       title={`${n} ${n === 1 ? 'chat espera' : 'chats esperan'} a una persona`}
     >
       {n > 9 ? '9+' : n}

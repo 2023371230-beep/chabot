@@ -116,14 +116,14 @@ export function DataTable<T>({
             key={resolveRowKey(row)}
             className="rounded-md border border-border bg-surface p-3"
           >
-            <div className="text-[13px] font-medium">{principal.cell(row)}</div>
+            <div className="text-sm font-medium">{principal.cell(row)}</div>
 
             {datos.length ? (
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-rule pt-2">
                 {datos.map((column) => (
                   <div key={column.header} className="min-w-0">
                     <dt className="label">{column.header}</dt>
-                    <dd className={cn('mt-0.5 truncate text-[13px]')}>{column.cell(row)}</dd>
+                    <dd className={cn('mt-0.5 truncate text-sm')}>{column.cell(row)}</dd>
                   </div>
                 ))}
               </dl>

@@ -103,6 +103,17 @@ export function FieldGroup({
 /**
  * Pie de formulario: separa visualmente la accion del contenido y mantiene el
  * boton primario siempre a la derecha, en el mismo lugar en todos los dialogos.
+ *
+ * Va PEGADO ABAJO (`sticky`) por un motivo medido, no estetico: los dialogos
+ * se limitan a 85dvh y el contenido desborda. En una pantalla de 1366x768 —
+ * la resolucion de portatil mas comun — el boton "Crear pedido" quedaba en
+ * y=842 con la ventana midiendo 768: fuera de la vista, alcanzable solo si al
+ * usuario se le ocurria hacer scroll DENTRO del dialogo. Un formulario cuyo
+ * boton de guardar no se ve es un formulario que no se puede enviar.
+ *
+ * Con `sticky bottom-0` la accion esta siempre a la vista y el que se mueve es
+ * el contenido, que es lo que se espera. `bg-surface` opaco (no translucido)
+ * para que el texto que pasa por debajo no se lea a traves.
  */
 export function FormFooter({
   children,
@@ -112,13 +123,17 @@ export function FormFooter({
   note?: string;
 }) {
   return (
-    <div className="-mx-4 -mb-4 mt-1 flex flex-col gap-2 border-t border-rule bg-surface-2/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    // El `bottom` negativo iguala al padding del dialogo (p-4, y p-5 en
+    // escritorio). `sticky bottom-0` se ancla al borde INTERIOR del contenedor
+    // con scroll, no al visible: dejaba una franja de 21px por la que se
+    // asomaba el contenido al scrollear, y la ventana parecia rota.
+    <div className="sticky -bottom-4 z-10 -mx-4 -mb-4 mt-1 flex flex-col gap-2 border-t border-rule bg-surface px-4 py-3 sm:-bottom-5 sm:-mx-5 sm:-mb-5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
       {note ? (
-        <p className="text-2xs leading-snug text-muted-foreground sm:max-w-[55%]">{note}</p>
+        <p className="text-xs leading-snug text-muted-foreground sm:max-w-[55%]">{note}</p>
       ) : (
         <span />
       )}
-      <div className="flex items-center justify-end gap-2">{children}</div>
+      <div className="flex shrink-0 items-center justify-end gap-2">{children}</div>
     </div>
   );
 }

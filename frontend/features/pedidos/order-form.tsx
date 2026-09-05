@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo } from 'react';
-import { useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { z } from 'zod';
 import { IconAgregar, IconAlerta, IconBorrar, IconCargando } from '@/components/icons';
 import { Button } from '@/components/ui/button';
@@ -100,7 +100,17 @@ export function OrderForm({
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: 'productos' });
-  const renglones = watch('productos');
+
+  // useWatch, NO watch.
+  //
+  // `watch('productos')` junto a `useFieldArray` devuelve el valor inicial y
+  // no vuelve a actualizarse: el total del pedido se quedaba clavado en
+  // "1 kg - $0.00" por mucho que se eligiera producto y cantidad. El usuario
+  // veia cero mientras capturaba doce kilos de pechuga, y solo se enteraba del
+  // importe real despues de guardar.
+  //
+  // `useWatch` se suscribe al control y si re-renderiza con cada cambio.
+  const renglones = useWatch({ control, name: 'productos' });
 
   const totales = useMemo(() => {
     return (renglones ?? []).reduce(

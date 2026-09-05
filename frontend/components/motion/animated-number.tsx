@@ -81,7 +81,14 @@ export function AnimatedNumber({
       {suffix ? (
         // El sufijo va en su propio span: dentro del string, el espacio de una
         // mono a 34px mide ~20px y abre un hueco enorme entre cifra y unidad.
-        <span className="ml-1 text-[0.6em] font-normal">{suffix.trim()}</span>
+        //
+        // Y va con tamaño FIJO, no relativo. Con `text-[0.6em]` la unidad
+        // heredaba el tamaño del numero y en los KPI chicos acababa
+        // renderizando a 7.8px, ilegible a cualquier distancia. Un "kg" se lee
+        // igual de lejos mida lo que mida la cifra que acompaña.
+        <span className="ml-1 text-sm font-normal text-muted-foreground">
+          {suffix.trim()}
+        </span>
       ) : null}
     </span>
   );

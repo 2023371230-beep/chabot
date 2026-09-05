@@ -34,7 +34,7 @@ export function InventoryAlerts({ rows }: { rows: InventarioResumen[] }) {
             return (
               <li key={item.producto_id} className="px-3 py-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate text-[13px] font-medium">{item.nombre}</span>
+                  <span className="truncate text-sm font-medium">{item.nombre}</span>
                   <span className="num shrink-0 text-xs text-danger">
                     {formatKg(actual)}
                   </span>

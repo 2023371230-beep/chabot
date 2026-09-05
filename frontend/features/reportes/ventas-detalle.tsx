@@ -73,7 +73,7 @@ export function VentasDetalle({ pedidos }: { pedidos: Pedido[] }) {
       ) : (
         <div className="scroll-y min-h-0 flex-1">
           {/* Escritorio: tabla con encabezado pegajoso */}
-          <table className="hidden w-full border-collapse text-[13px] md:table">
+          <table className="hidden w-full border-collapse text-sm md:table">
             <thead className="sticky top-0 z-10 bg-surface-2">
               <tr className="[&_th]:border-b [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-2xs [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.05em] [&_th]:text-muted-foreground">
                 <th>Ticket</th>
@@ -137,7 +137,7 @@ export function VentasDetalle({ pedidos }: { pedidos: Pedido[] }) {
               <article key={p.id} className="rounded-md border border-border bg-surface p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium">
+                    <div className="truncate text-sm font-medium">
                       {p.clientes?.nombre ?? p.cliente?.nombre ?? 'Cliente'}
                     </div>
                     <div className="num text-2xs text-muted-foreground">

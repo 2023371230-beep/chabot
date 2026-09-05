@@ -108,6 +108,33 @@ export const buscarProducto = (
   return { encontrado: false, sugerencias };
 };
 
+/**
+ * Comprueba que una fecha `YYYY-MM-DD` exista de verdad y no sea pasada.
+ *
+ * `new Date('2026-02-31')` no falla: JavaScript lo corre al 3 de marzo sin
+ * avisar. Por eso se compara el resultado contra lo que se pidio.
+ */
+const validarFecha = (iso: string, hoy: Date): string | null => {
+  const [a, m, d] = iso.split('-').map(Number);
+  const fecha = new Date(a, m - 1, d);
+
+  const existe =
+    fecha.getFullYear() === a && fecha.getMonth() === m - 1 && fecha.getDate() === d;
+  if (!existe) return null;
+
+  // Se compara a medianoche: un pedido "para hoy" a las 3 de la tarde sigue
+  // siendo valido.
+  const inicioDeHoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  if (fecha < inicioDeHoy) return null;
+
+  // Mas de un año adelante es un error de tipeo en el año, no una entrega.
+  const limite = new Date(inicioDeHoy);
+  limite.setFullYear(limite.getFullYear() + 1);
+  if (fecha > limite) return null;
+
+  return iso;
+};
+
 const DIAS: Record<string, number> = {
   domingo: 0,
   lunes: 1,
@@ -137,7 +164,15 @@ export const interpretarFecha = (texto: string | null | undefined): string | nul
       d.getDate()
     ).padStart(2, '0')}`;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(texto.trim())) return texto.trim();
+  // Una fecha ya formateada se acepta, pero solo si EXISTE y no es pasada.
+  //
+  // El modelo devuelve fechas inventadas con mas frecuencia de la que parece:
+  // "31 de febrero", o el año en que fue entrenado. Sin este filtro, un
+  // "para el 2024-03-15" quedaria agendado en el pasado y el pedido no
+  // aparece en ninguna vista de proximas entregas — desaparece en silencio.
+  const yaFormateada = /^\d{4}-\d{2}-\d{2}$/.exec(texto.trim());
+  if (yaFormateada) return validarFecha(yaFormateada[0], hoy);
+
   if (t.includes('hoy')) return aISO(hoy);
 
   if (t.includes('pasado manana')) {

@@ -75,16 +75,26 @@ const config: Config = {
         num: ['var(--font-num)', 'ui-monospace', 'monospace']
       },
       // Escala densa: el salto grande esta en los titulos, no en el cuerpo.
+      // Escala subida un escalon respecto a la original.
+      //
+      // Medido en el panel: 31 elementos a 11px, 61 a 13px, y las etiquetas
+      // que dicen QUE significa cada numero eran el texto mas chico de la
+      // pantalla. Un "718" enorme con "Kilos comprometidos" a 11px se ve pero
+      // no se entiende sin acercarse.
+      //
+      // El salto grande sigue estando en los titulos, no en el cuerpo: la
+      // densidad se conserva, solo deja de castigar al que lee de lejos o de
+      // pie frente al mostrador.
       fontSize: {
-        '2xs': ['11px', { lineHeight: '14px' }],
-        xs: ['12px', { lineHeight: '16px' }],
-        sm: ['13px', { lineHeight: '18px' }],
-        base: ['14px', { lineHeight: '20px' }],
-        md: ['15px', { lineHeight: '22px' }],
-        lg: ['17px', { lineHeight: '24px', letterSpacing: '-0.01em' }],
-        xl: ['20px', { lineHeight: '26px', letterSpacing: '-0.015em' }],
-        '2xl': ['26px', { lineHeight: '30px', letterSpacing: '-0.02em' }],
-        '3xl': ['34px', { lineHeight: '38px', letterSpacing: '-0.025em' }]
+        '2xs': ['12px', { lineHeight: '16px' }],
+        xs: ['13px', { lineHeight: '18px' }],
+        sm: ['15px', { lineHeight: '21px' }],
+        base: ['16px', { lineHeight: '23px' }],
+        md: ['17px', { lineHeight: '25px' }],
+        lg: ['19px', { lineHeight: '26px', letterSpacing: '-0.01em' }],
+        xl: ['22px', { lineHeight: '28px', letterSpacing: '-0.015em' }],
+        '2xl': ['28px', { lineHeight: '33px', letterSpacing: '-0.02em' }],
+        '3xl': ['36px', { lineHeight: '41px', letterSpacing: '-0.025em' }]
       },
       boxShadow: {
         sm: 'var(--shadow-1)',

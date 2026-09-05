@@ -104,10 +104,16 @@ export const whatsappService = {
       await marcarComoLeido(mensaje.wamid);
     }
 
+    // Audios, fotos, videos, stickers y ubicaciones.
+    //
+    // Se contesta distinto segun lo que mandaron: un "no leo imagenes" a
+    // quien mando una nota de voz suena a que ni se molestaron en mirar. Y
+    // decir QUE hacer en su lugar es lo que evita que el cliente reenvie lo
+    // mismo tres veces.
     if (mensaje.tipo !== 'text' || !mensaje.texto) {
-      const r = 'Por ahora solo leo mensajes de texto. Escribeme que necesitas y cuantos kilos.';
+      const r = respuestaParaNoTexto(mensaje.tipo);
       await this.responder(mensaje.telefono, r, guardado.id);
-      return { ...base, procesado: true, motivo: 'Tipo no soportado', respuesta: r };
+      return { ...base, procesado: true, motivo: `Tipo no soportado: ${mensaje.tipo}`, respuesta: r };
     }
 
     // 2. El flujo de negocio.
@@ -581,15 +587,22 @@ export const whatsappService = {
     // Stock imposible: el bot no puede prometer lo que no hay. Se revisa
     // ANTES de crear nada, porque un pedido creado ya es una promesa.
     const faltante = this.revisarStock(renglones, catalogo);
-    if (faltante.length) {
-      return this.pasarAPersona({
+    if (faltante.detalle.length) {
+      const handoff = await this.pasarAPersona({
         telefono,
         memoria,
         motivo: 'sin_stock',
-        detalle: faltante.join('; '),
+        detalle: faltante.detalle.join('; '),
         nombrePerfil,
         texto
       });
+      return {
+        respuesta: [
+          `${faltante.paraElCliente.join('\n')}.`,
+          '',
+          handoff.respuesta
+        ].join('\n')
+      };
     }
 
     // Se entendio: se borra la cuenta de fallos seguidos.
@@ -626,24 +639,32 @@ export const whatsappService = {
   revisarStock(
     renglones: Renglon[],
     catalogo: Awaited<ReturnType<typeof productosService.findAll>>
-  ): string[] {
+  ): { detalle: string[]; paraElCliente: string[] } {
     const porId = new Map(catalogo.map((p) => [p.id, p]));
-    const faltantes: string[] = [];
+    const detalle: string[] = [];
+    const paraElCliente: string[] = [];
 
     for (const r of renglones) {
       const prod = porId.get(r.producto_id);
       if (!prod) continue;
       const disponible = Number(prod.stock_actual);
-      // El umbral: se escala cuando piden mas del doble de lo que hay.
-      // Debajo de eso, `createOrder` ya avisa con su warning de stock.
+
+      // No se frena por faltar un kilo: casi siempre entra mercancia antes de
+      // la entrega y rechazar por eso perderia ventas. Se escala cuando la
+      // diferencia es grande de verdad — pedir 80 habiendo 30 no se arregla
+      // con un "puede que no tengamos todo".
       if (r.kg > disponible * 2 && r.kg - disponible > 20) {
-        faltantes.push(
-          `${prod.nombre}: piden ${formatKg(r.kg)} y hay ${formatKg(disponible)}`
+        detalle.push(`${prod.nombre}: piden ${formatKg(r.kg)} y hay ${formatKg(disponible)}`);
+        // Al cliente se le dice la cantidad REAL. Un "no tenemos suficiente"
+        // sin numero lo deja sin poder decidir; con el numero puede pedir lo
+        // que si hay y cerrar la venta hoy.
+        paraElCliente.push(
+          `${prod.nombre}: solo tenemos ${formatKg(disponible)} para entrega inmediata`
         );
       }
     }
 
-    return faltantes;
+    return { detalle, paraElCliente };
   },
 
   /**
@@ -842,6 +863,34 @@ export const whatsappService = {
     }
   }
 };
+
+/**
+ * Que contestar a lo que no es texto.
+ *
+ * Groq lee texto, punto: un audio o una foto no se pueden procesar. Lo que si
+ * se puede es no hacer sentir tonto al cliente y decirle exactamente que
+ * hacer, porque un "no entiendo" seco hace que reenvie el mismo audio.
+ */
+function respuestaParaNoTexto(tipo: string): string {
+  const cierre = 'Escribame por texto que corte necesita y cuantos kilos, y se lo anoto en seguida.';
+
+  switch (tipo) {
+    case 'audio':
+    case 'voice':
+      return `Disculpe, por aqui todavia no puedo escuchar notas de voz. ${cierre}`;
+    case 'image':
+    case 'video':
+    case 'document':
+      return `Disculpe, por aqui todavia no puedo ver imagenes ni archivos. ${cierre}`;
+    case 'sticker':
+      // Un sticker no es una pregunta: se contesta corto y sin regañar.
+      return `Aqui andamos! ${cierre}`;
+    case 'location':
+      return `Gracias por la ubicacion. La entrega la coordina una persona, en un momento le contesta. Si quiere ir adelantando el pedido, ${cierre.toLowerCase()}`;
+    default:
+      return `Por ahora solo puedo leer mensajes de texto. ${cierre}`;
+  }
+}
 
 /**
  * El mensaje de vuelta al cliente.

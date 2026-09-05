@@ -12,7 +12,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        'flex h-9 w-full rounded-sm border bg-surface px-2.5 text-[13px] text-foreground shadow-sm outline-none transition-[border-color,box-shadow]',
+        'flex h-9 w-full rounded-sm border bg-surface px-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow]',
         'placeholder:text-muted-foreground/70',
         'focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20',
         'disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
@@ -39,7 +39,7 @@ const AffixInput = React.forwardRef<HTMLInputElement, AffixInputProps>(
   ({ prefix, suffix, className, invalid, ...props }, ref) => (
     <div className="relative">
       {prefix ? (
-        <span className="num pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">
+        <span className="num pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
           {prefix}
         </span>
       ) : null}

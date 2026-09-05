@@ -80,17 +80,17 @@ export function SalesPanel({ orders }: { orders: Pedido[] }) {
           <dl className="grid grid-cols-3 gap-x-3 gap-y-2 border-t border-rule pt-2.5">
             <div>
               <dt className="label">Acumulado</dt>
-              <dd className="num mt-0.5 text-[13px] font-medium">
+              <dd className="num mt-0.5 text-sm font-medium">
                 {formatCurrency(datos.ingresoTotal)}
               </dd>
             </div>
             <div>
               <dt className="label">Ticket prom.</dt>
-              <dd className="num mt-0.5 text-[13px] font-medium">{formatCurrency(datos.ticket)}</dd>
+              <dd className="num mt-0.5 text-sm font-medium">{formatCurrency(datos.ticket)}</dd>
             </div>
             <div>
               <dt className="label">Kg vendidos</dt>
-              <dd className="num mt-0.5 text-[13px] font-medium">
+              <dd className="num mt-0.5 text-sm font-medium">
                 <AnimatedNumber value={datos.kgVendidos} suffix=" kg" />
               </dd>
             </div>

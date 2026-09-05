@@ -52,7 +52,11 @@ export function OrderStatusActions({
             void change('confirmado', `Pedido confirmado. Se descontaron ${kg} del stock.`)
           }
           trigger={
-            <Button variant="outline" size="sm">
+            // Primario, no contorno. Confirmar es lo que se hace cincuenta
+            // veces al dia; cancelar, dos por semana. Antes el boton rojo
+            // relleno de Cancelar era lo mas llamativo de cada fila, y con
+            // seis pedidos identicos en pantalla el color funciona como iman.
+            <Button variant="primary" size="sm">
               <IconCheck />
               Confirmar
             </Button>
@@ -83,7 +87,9 @@ export function OrderStatusActions({
           cancelLabel="No, dejarlo asi"
           onConfirm={() => void change('cancelado', 'Pedido cancelado.')}
           trigger={
-            <Button variant="danger" size="sm">
+            // `danger-soft` conserva el rojo (el significado) pero deja de
+            // gritar. El dialogo de confirmacion sigue detras.
+            <Button variant="danger-soft" size="sm">
               <IconProhibido />
               Cancelar
             </Button>
