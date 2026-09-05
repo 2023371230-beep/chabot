@@ -738,7 +738,13 @@ export const whatsappService = {
         productos: renglones
       });
 
-      const resumen = componerResumen(pedido, warnings, params.noEncontrados ?? [], saludo);
+      let resumen = componerResumen(pedido, warnings, params.noEncontrados ?? [], saludo);
+
+      // El pedido se toma igual fuera de horario; solo se avisa. Rechazarlo
+      // por la hora seria regalar la venta a quien escribe de noche.
+      const fueraDeHorario = await this.avisoFueraDeHorario();
+      if (fueraDeHorario) resumen = `${resumen}\n\n${fueraDeHorario}`;
+
       memoria.recordarPedido(firma, resumen);
       return { respuesta: resumen, pedidoId: pedido.id };
     } catch (e) {
@@ -841,6 +847,52 @@ export const whatsappService = {
   async armarHorario(saludo: string): Promise<string> {
     const config = await configuracionService.getCurrent();
     return `${saludo}! Atendemos de ${config.horario_apertura} a ${config.horario_cierre}. Digame en que le puedo ayudar.`;
+  },
+
+  /**
+   * Aviso de que el pedido entra fuera de horario.
+   *
+   * NO bloquea nada: el pedido se toma igual. Un cliente que escribe a las
+   * once de la noche esta comprando, y rechazarlo por la hora seria regalar la
+   * venta. Lo unico que hace falta es que no se quede esperando una entrega
+   * que no va a salir hasta mañana.
+   *
+   * El texto sale de `configuracion_empresa.mensaje_fuera_horario`, que existia
+   * en la base desde el principio y no lo usaba nadie.
+   */
+  async avisoFueraDeHorario(): Promise<string | null> {
+    try {
+      const config = await configuracionService.getCurrent();
+      const aviso = config.mensaje_fuera_horario?.trim();
+      if (!aviso) return null;
+
+      const ahora = new Intl.DateTimeFormat('es-MX', {
+        timeZone: 'America/Mexico_City',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(new Date());
+
+      const enMinutos = (hhmm: string): number => {
+        const [h, m] = hhmm.split(':').map(Number);
+        return h * 60 + (m || 0);
+      };
+
+      const t = enMinutos(ahora);
+      const abre = enMinutos(config.horario_apertura);
+      const cierra = enMinutos(config.horario_cierre);
+
+      // Si el cierre es menor que la apertura, el turno cruza la medianoche
+      // (por ejemplo 22:00 a 06:00) y la comparacion se invierte.
+      const abierto = abre <= cierra ? t >= abre && t < cierra : t >= abre || t < cierra;
+
+      return abierto ? null : aviso;
+    } catch (e) {
+      // Sin configuracion legible se prefiere no decir nada: un aviso
+      // equivocado de horario confunde mas que la ausencia de aviso.
+      console.error('[whatsapp] no se pudo revisar el horario:', e instanceof Error ? e.message : e);
+      return null;
+    }
   },
 
   async responder(telefono: string, texto: string, mensajeOrigenId?: string): Promise<void> {
