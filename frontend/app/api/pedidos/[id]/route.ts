@@ -1,0 +1,16 @@
+import { dinamico, leerCuerpo, ok, ruta } from '@/server/http/route';
+
+export const dynamic = dinamico;
+import { pedidosService } from '@/server/modules/pedidos/pedidos.service';
+import { updatePedidoSchema } from '@/server/modules/pedidos/pedidos.schemas';
+
+export const GET = ruta(async (_req, { params }) =>
+  ok('Pedido obtenido', await pedidosService.findById(params.id))
+);
+
+export const PATCH = ruta(async (req, { params }) =>
+  ok(
+    'Pedido actualizado',
+    await pedidosService.updateOrder(params.id, await leerCuerpo(req, updatePedidoSchema))
+  )
+);

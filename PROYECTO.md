@@ -39,12 +39,23 @@ que nombra la consecuencia.
 
 ## 2. Arquitectura
 
+**Una sola app de Next.js.** El backend de Express se retiró: sus servicios
+viven ahora dentro del mismo proyecto y se exponen como rutas de la API. Eso es
+lo que permite desplegar todo en Vercel con un `git push` (ver
+[DESPLIEGUE.md](DESPLIEGUE.md)).
+
 ```
 Pollito/
-├── backend/          Express + TypeScript, puerto 4000
-│   ├── src/
+├── sql/
+│   ├── 001_schema_completo.sql      el esquema, listo para pegar
+│   ├── 002_estado_serverless.sql    presupuesto de IA compartido
+│   └── README.md                    justificación de cada decisión
+│
+├── frontend/         Next.js 14 App Router, puerto 3000 — TODA la app
+│   ├── server/       el antiguo backend: NO se importa desde el navegador
 │   │   ├── config/env.ts          variables de entorno centralizadas
 │   │   ├── database/              cliente de Supabase (service_role)
+│   │   ├── http/route.ts          sobre de respuesta + errores → HTTP
 │   │   ├── modules/               un módulo por dominio
 │   │   │   ├── ai/                extracción con Groq
 │   │   │   ├── clientes/
@@ -52,19 +63,16 @@ Pollito/
 │   │   │   ├── inventario/
 │   │   │   ├── pedidos/
 │   │   │   ├── productos/
-│   │   │   └── whatsapp/          webhook + cliente de Meta
+│   │   │   └── whatsapp/
 │   │   │       ├── whatsapp.intents.ts      reglas SIN IA (el filtro)
 │   │   │       ├── whatsapp.matcher.ts      nombre de corte → UUID, fechas
-│   │   │       ├── whatsapp.memoria.ts      memoria corta de conversación
+│   │   │       ├── whatsapp.memoria.ts      memoria corta (en la base)
 │   │   │       ├── whatsapp.presupuesto.ts  racionamiento de la cuota de IA
+│   │   │       ├── whatsapp.handoff.ts      apagado controlado del bot
 │   │   │       └── whatsapp.service.ts      orquesta todo
-│   │   └── shared/                errores, respuestas, validación
+│   │   └── shared/                errores y utilidades
 │   ├── scripts/                   simuladores (`npm run simular`)
-│   └── sql/
-│       ├── 001_schema_completo.sql   ← el esquema, listo para pegar
-│       └── README.md                 ← justificación de cada decisión
-│
-├── frontend/         Next.js 14 App Router, puerto 3000
+│   ├── app/api/                   las rutas: un route.ts por endpoint
 │   ├── app/          una carpeta por ruta
 │   ├── components/
 │   │   ├── icons/    set propio de 30 iconos SVG
@@ -80,12 +88,13 @@ Pollito/
     └── design-system.md   dirección visual anterior (histórica)
 ```
 
-Cada módulo del backend sigue el mismo patrón:
-`routes.ts` → `controller.ts` → `service.ts`, con `schemas.ts` (Zod) y
-`types.ts`.
+Cada módulo de `server/` es `service.ts` + `schemas.ts` (Zod) + `types.ts`.
+Los antiguos `controller.ts` y `routes.ts` de Express desaparecieron: su
+trabajo lo hace ahora `app/api/**/route.ts`, que valida con el MISMO esquema de
+Zod y llama al MISMO servicio.
 
 **El frontend NO habla con Supabase para datos.** Solo lo usa para
-`auth.signInWithPassword`. Todo lo demás pasa por el backend con la
+`auth.signInWithPassword`. Todo lo demás pasa por `app/api/**` con la
 `service_role`. Esto es lo que permite cerrar RLS por completo.
 
 ---
@@ -168,7 +177,7 @@ Medido con los simuladores:
 Se re-corren con:
 
 ```bash
-cd backend && npm run simular && npm run simular:conversaciones
+cd frontend && npm run simular && npm run simular:conversaciones
 ```
 
 ---
@@ -202,17 +211,18 @@ También hay que decidir cómo manejar conversaciones de varios turnos. La tabla
 `conversaciones_whatsapp` ya existe con su campo `contexto` (JSONB) y su
 máquina de estados, pero **nadie la usa todavía**.
 
-### 🔴 Autenticación del backend
+### 🔴 Autenticación de la API
 
-**El backend no tiene ninguna.** Cero middlewares. Cualquiera que llegue al
-puerto 4000 puede crear y confirmar pedidos, y confirmar descuenta stock real.
+**No hay ninguna.** El webhook sí está cerrado (firma HMAC verificada; probado:
+un POST sin firmar recibe 401), pero `/api/pedidos` y `/api/productos` están
+abiertas a quien conozca el dominio. Y confirmar un pedido **descuenta stock
+real**.
 
-En localhost da igual. **En cuanto se exponga con ngrok es crítico.**
+En localhost da igual. **Desplegado en Vercel es crítico**, porque la URL es
+pública y estable.
 
-Mínimo necesario:
-- Verificar la firma `X-Hub-Signature-256` en el webhook (el código ya está,
-  solo falta poner `WHATSAPP_APP_SECRET`)
-- Proteger el resto de rutas con el JWT de Supabase
+Lo que falta: proteger las rutas de `app/api/**` con el JWT de Supabase, y
+quitar `NEXT_PUBLIC_DISABLE_AUTH`.
 
 ### 🟡 Backend no aprovecha el esquema nuevo
 
@@ -237,14 +247,14 @@ Sin él, Reportes solo puede mostrar **ingresos**, nunca **ganancia**. Requiere:
   que los pedidos viejos conserven el costo del momento)
 - Añadirlo al formulario de producto y a los cálculos de Reportes
 
-### 🟡 Migración a Next.js API Routes (Vercel)
+### ✅ Migración a Next.js API Routes (hecha)
 
-**0 API routes creadas.** Era el objetivo original: mover todo el backend a
-`frontend/app/api/**/route.ts` para desplegar gratis en Vercel.
+Express se retiró. Los 20 endpoints viven en `frontend/app/api/**/route.ts` y
+llaman a los mismos servicios, validando con los mismos esquemas de Zod. Ver
+[DESPLIEGUE.md](DESPLIEGUE.md).
 
-Se dejó al final a propósito: mover un webhook que todavía no funciona solo
-cambia el problema de lugar. El webhook usaría `waitUntil` de
-`@vercel/functions` en vez de `setImmediate`.
+Falta un paso manual: **aplicar `sql/002_estado_serverless.sql` en Supabase.**
+Sin él el bot funciona pero sin presupuesto de IA, y el síntoma es silencioso.
 
 ### 🟢 Cosas menores
 
@@ -426,15 +436,20 @@ PostgreSQL lo prohíbe: toda función corre dentro de una transacción. Por eso
 
 ## 7. Credenciales — dónde va cada una
 
-| Variable | Archivo | De dónde se saca |
-|---|---|---|
-| `SUPABASE_URL` | `backend/.env` y `frontend/.env.local` (×2) | Settings → API → Project URL |
-| `SUPABASE_SECRET_KEY` | `backend/.env` y `frontend/.env.local` | Settings → API Keys → **Secret** |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `frontend/.env.local` | Settings → API Keys → **Publishable** |
-| `GROQ_API_KEY` | `backend/.env` y `frontend/.env.local` | console.groq.com/keys |
-| `WHATSAPP_ACCESS_TOKEN` | `backend/.env` | Business Settings → System Users → Generate Token |
-| `WHATSAPP_APP_SECRET` | `backend/.env` | developers.facebook.com → app → Configuración → Básica |
-| `WHATSAPP_VERIFY_TOKEN` | `backend/.env` | **Lo inventas tú.** Debe coincidir con el de Meta |
+**Todas viven en un solo archivo: `frontend/.env.local`.** Ya no hay dos.
+Para Vercel, las mismas se copian en Settings → Environment Variables.
+
+| Variable | De dónde se saca |
+|---|---|
+| `SUPABASE_URL` | Settings → API → Project URL |
+| `SUPABASE_SECRET_KEY` | Settings → API Keys → **Secret** |
+| `NEXT_PUBLIC_SUPABASE_URL` | La misma URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Settings → API Keys → **Publishable** |
+| `GROQ_API_KEY` | console.groq.com/keys |
+| `WHATSAPP_ACCESS_TOKEN` | Business Settings → System Users → Generate Token |
+| `WHATSAPP_APP_SECRET` | developers.facebook.com → app → Configuración → Básica |
+| `WHATSAPP_VERIFY_TOKEN` | **Lo inventas tú.** Debe coincidir con el de Meta |
+| `WHATSAPP_ALERTA_NUMERO` | **Tu celular**, con lada y sin el `+` |
 
 ⚠️ La `SECRET` nunca va en una variable `NEXT_PUBLIC_*`: acabaría en el bundle
 del navegador.
@@ -451,20 +466,30 @@ sin valores.
 ## 8. Cómo correrlo
 
 ```bash
-# backend, puerto 4000
-cd backend && npm run dev
-
-# frontend, puerto 3000
 cd frontend && npm run dev
 ```
 
-Hay un `.claude/launch.json` con ambos configurados.
+Un solo comando: la app y su API son el mismo proyecto (puerto 3000).
 
 ### Verificar que todo responde
 
 ```bash
-curl http://localhost:4000/api/health
-curl http://localhost:4000/api/productos
+curl http://localhost:3000/api/health
+curl http://localhost:3000/api/productos
+```
+
+`/api/health` devuelve además la cuota de IA que queda hoy.
+
+### Los simuladores
+
+```bash
+cd frontend
+npm run simular                 # 67 escenarios contra las reglas, sin red
+npm run simular:conversaciones  # memoria y presupuesto contra la base
+npm run probar:handoff          # apagado controlado (manda alertas reales)
+npm run simular:real            # conversación completa con IA de verdad
+node scripts/probar-webhook.js  # el webhook por HTTP, con firma
+npm run limpiar:pruebas         # borra lo que dejaron los anteriores
 ```
 
 ### Probar el webhook sin Meta

@@ -1,6 +1,11 @@
 import type { ApiResponse } from '@/types/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+/**
+ * Las rutas viven en este mismo proyecto de Next (`app/api/**`), asi que por
+ * defecto se habla en relativo: el mismo codigo funciona en localhost y en
+ * Vercel sin cambiar nada al desplegar.
+ */
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
