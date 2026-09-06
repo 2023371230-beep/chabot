@@ -1,6 +1,7 @@
 import { supabase } from '../../database/supabase.client';
 import { env } from '../../config/env';
 import { enviarMensaje } from './whatsapp.client';
+import { ETIQUETA_MOTIVO, recortar, type MotivoHandoff } from '../../../lib/handoff';
 
 /**
  * El apagado controlado del bot.
@@ -28,29 +29,27 @@ import { enviarMensaje } from './whatsapp.client';
  * nada.
  */
 
-export type MotivoHandoff =
-  | 'queja'
-  | 'enojo'
-  | 'negociacion'
-  | 'logistica'
-  | 'solicitud'
-  | 'sin_stock'
-  | 'modificacion'
-  | 'sin_cuota'
-  | 'no_entendido';
-
-/** Como se le explica cada motivo a la persona que va a tomar el chat. */
-const ETIQUETA: Record<MotivoHandoff, string> = {
-  queja: 'Reclamo de calidad',
-  enojo: 'Cliente molesto',
-  negociacion: 'Pide descuento o credito',
-  logistica: 'Pregunta por entrega, direccion o pago',
-  solicitud: 'Pidio hablar con una persona',
-  sin_stock: 'Pedido mayor al stock disponible',
-  modificacion: 'Quiere cambiar un pedido ya hecho',
-  sin_cuota: 'Se agoto la cuota del asistente',
-  no_entendido: 'El bot no entendio despues de varios intentos'
+/**
+ * Lo unico que `pausar` necesita de la `Memoria`.
+ *
+ * Se declara la forma en vez de importar la clase para no crear un ciclo entre
+ * los dos modulos: la memoria no sabe nada del handoff y el handoff solo
+ * necesita poder marcar.
+ */
+export type MemoriaEscalable = {
+  marcarEscalado(datos: {
+    motivo: string;
+    detalle?: string;
+    nombreCliente?: string;
+    ultimoMensaje?: string;
+  }): void;
 };
+
+// El tipo y las etiquetas viven en `lib/handoff.ts`, que es puro y lo puede
+// importar tambien el navegador: antes habia una copia aqui y otra en el hook,
+// y ya habian divergido — el mismo chat se anunciaba con un texto por WhatsApp
+// y con otro distinto en el dashboard.
+export type { MotivoHandoff };
 
 /**
  * Lo que se le dice al cliente. Nunca menciona la palabra "bot", "sistema" ni
@@ -87,11 +86,12 @@ export type ChatPausado = {
   ultimoMensaje: string | null;
 };
 
+/** La forma de las llaves de handoff dentro de `conversaciones_whatsapp.contexto`. */
 type ContextoHandoff = {
-  motivo: MotivoHandoff;
+  motivo?: MotivoHandoff;
   detalle?: string;
   nombre_cliente?: string;
-  pausado_en: string;
+  pausado_en?: string;
   ultimo_mensaje?: string;
 };
 
@@ -125,21 +125,36 @@ export const estaPausada = async (telefono: string): Promise<boolean> => {
 /**
  * Pausa el bot, deja constancia y avisa al encargado.
  *
- * Devuelve el texto que hay que mandarle al cliente. Nunca lanza: si algo
- * falla al registrar el handoff, el cliente igual recibe su respuesta.
+ * El motivo NO se escribe aqui: se deja en la `Memoria` que el servicio ya
+ * tiene cargada, y esa la persiste con su unica escritura al final del
+ * mensaje. Antes este modulo leia la conversacion otra vez y la escribia por
+ * su cuenta, y despues `guardar()` la sobrescribia con el contexto anterior al
+ * escalamiento: el motivo se perdia y el dashboard mostraba "Pidio hablar con
+ * alguien" para todo. Una sola fuente y una sola escritura.
+ *
+ * Devuelve el texto para el cliente. Nunca lanza: si falla el rastro o el
+ * aviso, el cliente igual recibe su respuesta.
  */
 export const pausar = async (params: {
   telefono: string;
+  memoria: MemoriaEscalable;
   motivo: MotivoHandoff;
   detalle?: string;
   nombreCliente?: string;
   ultimoMensaje?: string;
 }): Promise<string> => {
-  const { telefono, motivo, detalle, nombreCliente, ultimoMensaje } = params;
+  const { telefono, memoria, motivo, detalle, nombreCliente, ultimoMensaje } = params;
+
+  memoria.marcarEscalado({ motivo, detalle, nombreCliente, ultimoMensaje });
 
   try {
-    await registrar(telefono, motivo, detalle, nombreCliente, ultimoMensaje);
-    await avisarAlEncargado(telefono, motivo, detalle, nombreCliente, ultimoMensaje);
+    // El rastro y el aviso son independientes: no hay razon para esperar uno
+    // antes de empezar el otro, y el aviso es un viaje a Meta que el cliente
+    // paga en su tiempo de respuesta.
+    await Promise.all([
+      dejarRastro(telefono, motivo, detalle),
+      avisarAlEncargado(telefono, motivo, detalle, nombreCliente, ultimoMensaje)
+    ]);
   } catch (e) {
     console.error('[handoff] no se pudo registrar:', e instanceof Error ? e.message : e);
   }
@@ -147,55 +162,20 @@ export const pausar = async (params: {
   return RESPUESTA[motivo];
 };
 
-const registrar = async (
+/**
+ * Rastro en el hilo de mensajes.
+ *
+ * Al abrir el chat en el dashboard se ve POR QUE se detuvo el bot, sin tener
+ * que adivinarlo del contexto.
+ */
+const dejarRastro = async (
   telefono: string,
   motivo: MotivoHandoff,
-  detalle?: string,
-  nombreCliente?: string,
-  ultimoMensaje?: string
+  detalle?: string
 ): Promise<void> => {
-  const contexto: ContextoHandoff = {
-    motivo,
-    detalle,
-    nombre_cliente: nombreCliente,
-    pausado_en: new Date().toISOString(),
-    ultimo_mensaje: ultimoMensaje
-  };
-
-  // El indice unico sobre telefono es PARCIAL (solo conversaciones no
-  // cerradas), y PostgREST no puede apoyarse en un indice parcial para hacer
-  // upsert. Por eso se busca y se decide a mano.
-  const { data: viva } = await supabase
-    .from('conversaciones_whatsapp')
-    .select('id, estado')
-    .eq('telefono', telefono)
-    .neq('estado', 'cerrada')
-    .is('deleted_at', null)
-    .maybeSingle();
-
-  if (viva) {
-    await supabase
-      .from('conversaciones_whatsapp')
-      .update({
-        estado: 'escalado_humano',
-        contexto,
-        ultimo_mensaje_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', viva.id);
-  } else {
-    await supabase.from('conversaciones_whatsapp').insert({
-      telefono,
-      estado: 'escalado_humano',
-      contexto
-    });
-  }
-
-  // Rastro en el hilo de mensajes: al abrir el chat en el dashboard se ve
-  // POR QUE se detuvo el bot, sin tener que adivinarlo del contexto.
   await supabase.from('mensajes_whatsapp').insert({
     telefono,
-    mensaje: `[HANDOFF] ${ETIQUETA[motivo]}${detalle ? ` — ${detalle}` : ''}`,
+    mensaje: `[HANDOFF] ${ETIQUETA_MOTIVO[motivo]}${detalle ? ` — ${detalle}` : ''}`,
     tipo: 'sistema',
     procesado: false
   });
@@ -220,7 +200,7 @@ const avisarAlEncargado = async (
 
   const quien = nombreCliente ? `${nombreCliente} (${telefono})` : telefono;
   const texto = [
-    `ALERTA — ${ETIQUETA[motivo]}`,
+    `ALERTA — ${ETIQUETA_MOTIVO[motivo]}`,
     '',
     `Cliente: ${quien}`,
     detalle ? `Detalle: ${detalle}` : null,
@@ -240,9 +220,6 @@ const avisarAlEncargado = async (
     console.warn(`[handoff] no se pudo avisar al encargado: ${envio.error}`);
   }
 };
-
-const recortar = (t: string, n: number): string =>
-  t.length > n ? `${t.slice(0, n)}...` : t;
 
 /** Los chats esperando a una persona, del que lleva mas tiempo al mas nuevo. */
 export const listarPendientes = async (): Promise<ChatPausado[]> => {

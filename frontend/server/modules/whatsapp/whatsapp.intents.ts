@@ -20,14 +20,7 @@
  * inocente: una queja que menciona kilos es una queja, no un pedido.
  */
 
-const normalizar = (t: string): string =>
-  t
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+import { normalizar } from '../../shared/utils/text.utils';
 
 /**
  * Tope de caracteres que se le manda al modelo.

@@ -20,6 +20,15 @@ export type CreatePedidoInput = {
   origen?: PedidoOrigen;
   notas?: string;
   productos: PedidoProductoInput[];
+  /**
+   * El catalogo, si quien llama ya lo tiene cargado.
+   *
+   * Solo lo usa el bot de WhatsApp, que lee los productos para resolver lo que
+   * escribio el cliente y para revisar el stock. Pasarlo evita releer la misma
+   * tabla al crear el pedido. Nunca viaja por la API: las rutas lo omiten y el
+   * esquema de Zod no lo acepta.
+   */
+  catalogo?: import('../productos/productos.types').Producto[];
 };
 
 export type UpdatePedidoInput = {

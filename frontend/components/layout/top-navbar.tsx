@@ -11,7 +11,7 @@ import { endpoints } from '@/lib/api/endpoints';
 import { navItems } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
-import { useHandoffs } from '@/hooks/use-handoffs';
+import { useHandoffs } from '@/features/whatsapp/handoffs-provider';
 import { MobileMenu } from './mobile-menu';
 
 export function TopNavbar() {
@@ -20,9 +20,9 @@ export function TopNavbar() {
   const { theme, setTheme } = useTheme();
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  // El sondeo vive aqui, en el navbar, porque el navbar esta montado en TODAS
-  // las pantallas: asi el aviso llega estes donde estes, no solo si tienes
-  // abierta la pestaña de WhatsApp.
+  // El sondeo lo hace el proveedor, montado en el shell. Aqui solo se lee el
+  // total, que el navbar esta en TODAS las pantallas: el aviso llega estes
+  // donde estes, no solo con la pestaña de WhatsApp abierta.
   const { total: esperando } = useHandoffs();
 
   useEffect(() => {

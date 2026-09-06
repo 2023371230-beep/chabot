@@ -1,4 +1,4 @@
-import { supabase } from '../../database/supabase.client';
+import { DUPLICADO, supabase } from '../../database/supabase.client';
 
 /**
  * La memoria corta de la conversacion.
@@ -58,8 +58,17 @@ type Contexto = {
   ultimoPedido?: { firma: string; resumen: string; en: number };
   /** Veces seguidas que el bot no entendio. */
   fallos?: number;
-  // El handoff escribe estas mismas llaves; se conservan al guardar para no
-  // borrar el motivo por el que una persona tomo el chat.
+  /**
+   * Por que una persona tomo el chat. Lo escribe `marcarEscalado` y lo lee el
+   * dashboard.
+   *
+   * Vive aqui y no en el modulo de handoff a proposito. Antes el handoff
+   * escribia estas llaves directamente en la base, y despues `guardar()`
+   * sobrescribia `contexto` con la version que se habia cargado ANTES del
+   * escalamiento: el motivo real se perdia y el dashboard mostraba
+   * "Pidio hablar con alguien" para todo, sin el mensaje que lo disparo.
+   * Con una sola fuente y una sola escritura, eso no puede volver a pasar.
+   */
   motivo?: string;
   detalle?: string;
   nombre_cliente?: string;
@@ -86,7 +95,9 @@ export class Memoria {
     readonly pausada: boolean,
     private ctx: Contexto,
     private readonly conversacionId: string | null,
-    private sucia = false
+    private sucia = false,
+    /** true si en este mensaje el chat pasa a manos de una persona. */
+    private escalando = false
   ) {}
 
   /**
@@ -118,16 +129,44 @@ export class Memoria {
     );
   }
 
+  /**
+   * Marca que una persona toma el chat.
+   *
+   * No escribe: deja el motivo en el contexto y el estado pendiente para que
+   * `guardar()` lo persista todo de una vez. Una sola escritura por mensaje
+   * significa que ninguna puede pisar a la otra.
+   */
+  marcarEscalado(datos: {
+    motivo: string;
+    detalle?: string;
+    nombreCliente?: string;
+    ultimoMensaje?: string;
+  }): void {
+    this.ctx.motivo = datos.motivo;
+    this.ctx.detalle = datos.detalle;
+    this.ctx.nombre_cliente = datos.nombreCliente;
+    this.ctx.ultimo_mensaje = datos.ultimoMensaje;
+    this.ctx.pausado_en = new Date().toISOString();
+    this.escalando = true;
+    this.cambio();
+  }
+
   /** Escribe solo si algo cambio. Un mensaje de cortesia no toca la base. */
   async guardar(): Promise<void> {
     if (!this.sucia) return;
 
     const ahora = new Date().toISOString();
+    const estado = this.escalando ? 'escalado_humano' : undefined;
 
     if (this.conversacionId) {
       const { error } = await supabase
         .from('conversaciones_whatsapp')
-        .update({ contexto: this.ctx, ultimo_mensaje_at: ahora, updated_at: ahora })
+        .update({
+          contexto: this.ctx,
+          ...(estado ? { estado } : {}),
+          ultimo_mensaje_at: ahora,
+          updated_at: ahora
+        })
         .eq('id', this.conversacionId);
       if (error) console.error('[memoria] no se pudo guardar:', error.message);
       return;
@@ -135,14 +174,14 @@ export class Memoria {
 
     const { error } = await supabase.from('conversaciones_whatsapp').insert({
       telefono: this.telefono,
-      estado: 'abierta',
+      estado: estado ?? 'abierta',
       contexto: this.ctx
     });
 
     // Dos mensajes del mismo cliente casi al mismo tiempo pueden intentar
     // crear la conversacion a la vez; el indice unico parcial deja pasar solo
     // a uno. Perder el contexto de ese mensaje no rompe nada.
-    if (error && error.code !== '23505') {
+    if (error && error.code !== DUPLICADO) {
       console.error('[memoria] no se pudo crear la conversacion:', error.message);
     }
   }

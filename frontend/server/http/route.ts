@@ -3,7 +3,7 @@ import type { User } from '@supabase/supabase-js';
 import type { ZodTypeAny } from 'zod';
 import { AppError } from '../shared/errors/AppError';
 import { exigirSesion } from './auth';
-import { consumir, identificar } from './limite';
+import { consumir, CUOTAS, identificar } from './limite';
 
 /**
  * El puente entre las rutas de Next y los servicios.
@@ -16,14 +16,6 @@ import { consumir, identificar } from './limite';
  * Express a proposito: el frontend ya lo entiende y cambiarlo obligaria a
  * tocar cada pantalla para no ganar nada.
  */
-
-export type Sobre<T> = {
-  success: boolean;
-  message: string;
-  data?: T;
-  errors?: unknown[];
-  warnings?: string[];
-};
 
 export const ok = <T>(message: string, data?: T, status = 200): NextResponse => {
   // `warnings` sube al nivel del sobre, como hacia `sendSuccess`: el frontend
@@ -55,15 +47,6 @@ type Contexto = { params: Record<string, string> };
 
 /** Igual que `Contexto`, mas el usuario que ya quedo verificado. */
 type ContextoConSesion = Contexto & { user: User };
-
-/**
- * Cuota por defecto de las rutas del dashboard.
- *
- * Generosa a proposito: una sola pantalla dispara varias peticiones al cargar y
- * el objetivo no es molestar al usuario legitimo, sino frenar a un script que
- * recorre la API entera.
- */
-const CUOTA_DASHBOARD = { maximo: 240, ventanaMs: 60_000 };
 
 const demasiadasPeticiones = (segundos: number): NextResponse =>
   NextResponse.json(
@@ -109,7 +92,7 @@ export const rutaPrivada =
     try {
       const user = await exigirSesion(req);
 
-      const veredicto = consumir(`api:${user.id}`, CUOTA_DASHBOARD);
+      const veredicto = consumir(`api:${user.id}`, CUOTAS.dashboard);
       if (!veredicto.permitido) {
         console.warn(`[limite] usuario ${user.id} excedio la cuota de la API`);
         return demasiadasPeticiones(veredicto.reintentarEn);

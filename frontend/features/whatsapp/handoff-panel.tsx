@@ -4,7 +4,8 @@ import { IconAlerta, IconWhatsapp } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/shared/empty-state';
-import { MOTIVOS, URGENTES, useHandoffs } from '@/hooks/use-handoffs';
+import { MOTIVOS_URGENTES, nombreMotivo } from '@/lib/handoff';
+import { useHandoffs } from '@/features/whatsapp/handoffs-provider';
 import { cn } from '@/lib/utils';
 
 /**
@@ -43,7 +44,7 @@ export function HandoffPanel() {
         ) : (
           <ul className="flex flex-col gap-2">
             {chats.map((chat) => {
-              const urgente = URGENTES.has(chat.motivo);
+              const urgente = MOTIVOS_URGENTES.has(chat.motivo);
               return (
                 <li
                   key={chat.id}
@@ -62,7 +63,7 @@ export function HandoffPanel() {
                             : 'bg-warning/15 text-warning'
                         )}
                       >
-                        {MOTIVOS[chat.motivo] ?? 'Necesita atencion'}
+                        {nombreMotivo(chat.motivo)}
                       </span>
                       <span className="text-sm font-medium">
                         {chat.nombreCliente ?? chat.telefono}

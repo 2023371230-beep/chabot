@@ -1,8 +1,9 @@
 import { dinamico, leerCuerpo, ok, rutaPrivada } from '@/server/http/route';
 
-export const dynamic = dinamico;
 import { pedidosService } from '@/server/modules/pedidos/pedidos.service';
 import { updatePedidoSchema } from '@/server/modules/pedidos/pedidos.schemas';
+
+export const dynamic = dinamico;
 
 export const GET = rutaPrivada(async (_req, { params }) =>
   ok('Pedido obtenido', await pedidosService.findById(params.id))

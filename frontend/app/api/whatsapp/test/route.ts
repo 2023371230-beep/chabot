@@ -1,7 +1,8 @@
 import { dinamico, leerCuerpo, ok, rutaPrivada } from '@/server/http/route';
 
-export const dynamic = dinamico;
 import { whatsappService } from '@/server/modules/whatsapp/whatsapp.service';
+
+export const dynamic = dinamico;
 
 /** Simulador para probar el flujo completo sin Meta de por medio. */
 export const POST = rutaPrivada(async (req) => {

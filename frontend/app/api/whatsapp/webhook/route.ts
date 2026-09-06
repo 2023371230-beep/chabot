@@ -2,7 +2,8 @@ import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { env, isWhatsappWebhookConfigured } from '@/server/config/env';
 import { whatsappService } from '@/server/modules/whatsapp/whatsapp.service';
-import { limitarPorIP } from '@/server/http/route';
+import { CUOTAS } from '@/server/http/limite';
+import { dinamico, limitarPorIP } from '@/server/http/route';
 import type { MetaWebhookPayload } from '@/server/modules/whatsapp/whatsapp.types';
 
 /**
@@ -15,7 +16,7 @@ import type { MetaWebhookPayload } from '@/server/modules/whatsapp/whatsapp.type
 
 // Sin esto Next podria cachear la respuesta del webhook, que es justo lo peor
 // que puede pasarle a un endpoint que recibe mensajes distintos cada vez.
-export const dynamic = 'force-dynamic';
+export const dynamic = dinamico;
 
 // El webhook usa `crypto` de Node y habla con Supabase y Groq: necesita el
 // runtime de Node, no el Edge.
@@ -75,8 +76,13 @@ export function GET(req: Request): NextResponse {
 const firmaValida = (crudo: string, firma: string | null): boolean => {
   const secret = env.whatsapp.appSecret;
   if (!secret) {
-    console.warn('[whatsapp] sin WHATSAPP_APP_SECRET: no se verifica la firma del webhook');
-    return true;
+    // Falla CERRADO, igual que `server/http/auth.ts`. Antes devolvia `true`
+    // "para no romper el desarrollo", y eso dejaba el webhook abierto a
+    // cualquiera que descubriera la URL con solo borrar una variable de
+    // entorno. Dos politicas opuestas para el mismo caso en el mismo proyecto
+    // era la incoherencia; esta es la que protege.
+    console.error('[whatsapp] falta WHATSAPP_APP_SECRET: no se puede verificar la firma');
+    return false;
   }
 
   if (!firma) return false;
@@ -115,7 +121,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // punta; 120 por minuto es holgado. Lo que corta es a quien descubre la URL
   // y la inunda: verificar una firma cuesta CPU, y sin este limite se pagaria
   // ese calculo por cada peticion basura.
-  const frenado = limitarPorIP(req, 'webhook', { maximo: 120, ventanaMs: 60_000 });
+  const frenado = limitarPorIP(req, 'webhook', CUOTAS.webhook);
   if (frenado) return frenado;
 
   const crudo = await req.text();

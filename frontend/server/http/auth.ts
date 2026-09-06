@@ -120,6 +120,3 @@ export const exigirSesion = async (req: Request): Promise<User> => {
   guardarEnCache(token, data.user);
   return data.user;
 };
-
-/** Solo para pruebas: vacia la cache de validaciones. */
-export const olvidarSesiones = (): void => cache.clear();

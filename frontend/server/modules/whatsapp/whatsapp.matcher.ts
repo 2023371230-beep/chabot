@@ -1,3 +1,4 @@
+import { normalizar } from '../../shared/utils/text.utils';
 import type { Producto } from '../productos/productos.types';
 
 /**
@@ -11,16 +12,6 @@ import type { Producto } from '../productos/productos.types';
  * cerrado es una busqueda, no una decision: con IA seria mas lento, mas caro y
  * podria inventar un producto que no existe.
  */
-
-/** Quita acentos y baja a minusculas: "Pechuga" y "pechugá" se vuelven iguales. */
-const normalizar = (texto: string): string =>
-  texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 
 /** Palabras que el cliente dice pero no ayudan a identificar el producto. */
 const RUIDO = new Set([

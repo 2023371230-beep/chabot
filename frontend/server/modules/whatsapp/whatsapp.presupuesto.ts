@@ -93,19 +93,3 @@ export const estadoPresupuesto = async () => {
     enElUltimoMinuto: r.en_el_minuto
   };
 };
-
-/**
- * Que le decimos al cliente cuando se cierra una cerca.
- *
- * Nunca se menciona "limite" ni "cuota": al cliente no le importa la
- * infraestructura, le importa que alguien le atienda.
- */
-export const mensajeDeEspera = (motivo: 'dia' | 'minuto' | 'telefono'): string => {
-  if (motivo === 'telefono') {
-    return 'Recibi varios mensajes suyos. Para no equivocarme con el pedido, en un momento le contesta una persona.';
-  }
-  if (motivo === 'minuto') {
-    return 'Deme un segundo, tengo varios pedidos entrando. Vuelva a escribirme su pedido en un minuto, porfa.';
-  }
-  return 'Por hoy ya no puedo tomar pedidos automaticamente. Digame que necesita y una persona le contesta en un momento.';
-};

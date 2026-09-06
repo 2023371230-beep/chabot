@@ -1,8 +1,9 @@
 import { dinamico, leerCuerpo, ok, rutaPrivada } from '@/server/http/route';
 
-export const dynamic = dinamico;
 import { inventarioService } from '@/server/modules/inventario/inventario.service';
 import { createInventarioMovimientoSchema } from '@/server/modules/inventario/inventario.schemas';
+
+export const dynamic = dinamico;
 
 export const GET = rutaPrivada(async () =>
   ok('Movimientos obtenidos', await inventarioService.findMovimientos())

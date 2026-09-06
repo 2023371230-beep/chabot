@@ -1,4 +1,5 @@
 import { estadoPresupuesto } from '@/server/modules/whatsapp/whatsapp.presupuesto';
+import { CUOTAS } from '@/server/http/limite';
 import { dinamico, limitarPorIP, ok, ruta } from '@/server/http/route';
 
 export const dynamic = dinamico;
@@ -17,7 +18,7 @@ export const dynamic = dinamico;
  * cuota de IA queda, que no dice nada de los clientes ni de las ventas.
  */
 export const GET = ruta(async (req) => {
-  const frenado = limitarPorIP(req, 'health', { maximo: 60, ventanaMs: 60_000 });
+  const frenado = limitarPorIP(req, 'health', CUOTAS.health);
   if (frenado) return frenado;
 
   return ok('Backend running', {

@@ -40,8 +40,25 @@ const limpiar = (ahora: number, ventanaMs: number): void => {
 };
 
 export type Veredicto =
-  | { permitido: true; restantes: number }
+  | { permitido: true }
   | { permitido: false; reintentarEn: number };
+
+/**
+ * Las cuotas, juntas y con nombre.
+ *
+ * Viven aqui, al lado del mecanismo que las aplica, y no repartidas por las
+ * rutas: antes cada una traia su propio `60_000` escrito a mano y no habia un
+ * sitio donde ver de un vistazo cuanto deja pasar el sistema.
+ */
+export const CUOTAS = {
+  /** Una pantalla dispara varias peticiones al cargar; el objetivo es frenar
+   *  a un script que recorre la API, no molestar a quien trabaja. */
+  dashboard: { maximo: 240, ventanaMs: 60_000 },
+  /** Meta manda pocos por segundo incluso en hora punta. */
+  webhook: { maximo: 120, ventanaMs: 60_000 },
+  /** Abierta sin sesion: no debe servir de amplificador. */
+  health: { maximo: 60, ventanaMs: 60_000 }
+} as const;
 
 /**
  * Consume una peticion de la cuota.
@@ -68,7 +85,7 @@ export const consumir = (
 
   ventana.marcas.push(ahora);
   ventanas.set(llave, ventana);
-  return { permitido: true, restantes: maximo - ventana.marcas.length };
+  return { permitido: true };
 };
 
 /**
@@ -86,6 +103,3 @@ export const identificar = (req: Request): string => {
   if (reenviada) return reenviada.split(',')[0].trim();
   return req.headers.get('x-real-ip') ?? 'desconocido';
 };
-
-/** Solo para pruebas. */
-export const olvidarLimites = (): void => ventanas.clear();

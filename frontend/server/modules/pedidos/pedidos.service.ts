@@ -56,11 +56,24 @@ const getProductosByIds = async (ids: string[]): Promise<Producto[]> => {
   return data ?? [];
 };
 
+/**
+ * Calcula el pedido: precios, totales y avisos de stock.
+ *
+ * `catalogo` es opcional y sirve para no releer los productos cuando quien
+ * llama YA los tiene en memoria. El bot de WhatsApp los carga para resolver
+ * los nombres que dijo el cliente y para revisar el stock; sin este parametro,
+ * crear el pedido volvia a pedir la misma tabla — un viaje de red entero
+ * desperdiciado en cada pedido que entra por el chat.
+ *
+ * El dashboard sigue llamando sin el y no cambia nada.
+ */
 const calculateOrder = async (
-  productosInput: PedidoProductoInput[]
+  productosInput: PedidoProductoInput[],
+  catalogo?: Producto[]
 ): Promise<CalculatedOrder> => {
   const normalized = normalizeProductos(productosInput);
-  const products = await getProductosByIds(normalized.map((item) => item.producto_id));
+  const products =
+    catalogo ?? (await getProductosByIds(normalized.map((item) => item.producto_id)));
   const productMap = new Map(products.map((producto) => [producto.id, producto]));
 
   const detalles: CalculatedOrder['detalles'] = [];
@@ -202,7 +215,7 @@ export const pedidosService = {
   async createOrder(input: CreatePedidoInput) {
     const origen = input.origen ?? 'whatsapp';
     const cliente = await clientesService.findOrCreateFromOrder(input.cliente, origen);
-    const calculated = await calculateOrder(input.productos);
+    const calculated = await calculateOrder(input.productos, input.catalogo);
     const business = await buildBusinessWarnings(calculated.totalKg, input.fecha_entrega);
 
     const { data: pedido, error: pedidoError } = await supabase

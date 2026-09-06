@@ -9,7 +9,7 @@ import type { ApiResponse } from '@/types/api';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 type RequestOptions = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PATCH';
   body?: unknown;
   signal?: AbortSignal;
 };
@@ -95,10 +95,6 @@ class ApiClient {
 
   patch<T>(path: string, body: unknown) {
     return this.request<T>(path, { method: 'PATCH', body });
-  }
-
-  delete<T>(path: string) {
-    return this.request<T>(path, { method: 'DELETE' });
   }
 }
 

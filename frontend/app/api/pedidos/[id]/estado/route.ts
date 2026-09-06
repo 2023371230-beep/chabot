@@ -1,8 +1,9 @@
 import { dinamico, leerCuerpo, ok, rutaPrivada } from '@/server/http/route';
 
-export const dynamic = dinamico;
 import { pedidosService } from '@/server/modules/pedidos/pedidos.service';
 import { updatePedidoEstadoSchema } from '@/server/modules/pedidos/pedidos.schemas';
+
+export const dynamic = dinamico;
 
 /**
  * Confirmar un pedido DESCUENTA STOCK REAL. Toda la validacion vive en

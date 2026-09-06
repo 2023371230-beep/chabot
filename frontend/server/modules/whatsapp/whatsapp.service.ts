@@ -1,9 +1,10 @@
-import { supabase } from '../../database/supabase.client';
+import { DUPLICADO, supabase } from '../../database/supabase.client';
 import { aiService } from '../ai/ai.service';
 import { clientesService } from '../clientes/clientes.service';
 import { pedidosService } from '../pedidos/pedidos.service';
 import { productosService } from '../productos/productos.service';
 import { formatCurrency, formatKg } from '../../shared/utils/format.utils';
+import { aMinutos } from '../../shared/utils/text.utils';
 import { buscarProducto, interpretarFecha } from './whatsapp.matcher';
 import { clasificar, saludoPorHora, MAX_CARACTERES_IA } from './whatsapp.intents';
 import { configuracionService } from '../configuracion/configuracion.service';
@@ -18,8 +19,7 @@ import {
   type MetaWebhookPayload
 } from './whatsapp.types';
 
-/** Codigo de PostgreSQL para violacion de restriccion unica. */
-const DUPLICADO = '23505';
+
 
 /**
  * Tope de kilos por renglon antes de dudar.
@@ -29,6 +29,18 @@ const DUPLICADO = '23505';
  * telefono. Despachar eso vacia el almacen, asi que se pregunta.
  */
 const MAX_KG_RAZONABLE = 500;
+
+/**
+ * Cuando el stock se considera insuficiente de verdad.
+ *
+ * No se frena por faltar un kilo: casi siempre entra mercancia antes de la
+ * entrega y rechazar por eso perderia ventas — para esos casos `createOrder`
+ * ya devuelve su aviso de stock. Se escala solo cuando la diferencia es grande
+ * en las DOS medidas: mas del doble de lo que hay, y al menos 20 kg de mas.
+ * Pedir 80 habiendo 30 cumple las dos; pedir 25 habiendo 20, ninguna.
+ */
+const FACTOR_STOCK_INSUFICIENTE = 2;
+const MARGEN_KG_TOLERADO = 20;
 
 type ResultadoMensaje = {
   wamid: string;
@@ -183,6 +195,7 @@ export const whatsappService = {
     params.memoria.limpiarFallos();
     const respuesta = await pausar({
       telefono: params.telefono,
+      memoria: params.memoria,
       motivo: params.motivo,
       detalle: params.detalle,
       nombreCliente: params.nombrePerfil,
@@ -221,7 +234,7 @@ export const whatsappService = {
         });
 
       case 'cancelacion':
-        return { respuesta: await this.atenderCancelacion(telefono) };
+        return this.atenderCancelacion(telefono, memoria, nombrePerfil, texto);
 
       case 'modificacion':
         return this.atenderModificacion(telefono, memoria, nombrePerfil, texto);
@@ -283,28 +296,63 @@ export const whatsappService = {
    * ni se preparo nada, y deshacerlo no cuesta. Un pedido ya confirmado si
    * toco inventario, y esa decision no la toma un bot.
    */
-  async atenderCancelacion(telefono: string): Promise<string> {
-    const pedidos = await this.pedidosDelCliente(telefono, 3);
-    const ultimo = pedidos[0];
+  async atenderCancelacion(
+    telefono: string,
+    memoria: Memoria,
+    nombrePerfil?: string,
+    texto?: string
+  ): Promise<Atencion> {
+    const [ultimo] = await this.pedidosDelCliente(telefono, 1);
 
     if (!ultimo) {
-      return 'No encuentro ningun pedido suyo abierto. Si quiere hacer uno, digame el corte y los kilos.';
+      return {
+        respuesta:
+          'No encuentro ningun pedido suyo abierto. Si quiere hacer uno, digame el corte y los kilos.'
+      };
     }
 
     if (ultimo.estado === 'cancelado') {
-      return 'Ese pedido ya estaba cancelado. No se preocupe, no se le va a cobrar nada.';
+      return {
+        respuesta: 'Ese pedido ya estaba cancelado. No se preocupe, no se le va a cobrar nada.'
+      };
     }
 
+    // Un pedido confirmado ya movio inventario: deshacerlo no es reversible
+    // solo, hace falta un ajuste manual. Esa decision no la toma un bot.
+    //
+    // Y como al cliente se le dice que lo vera una persona, TIENE que pasar de
+    // verdad: antes estas dos ramas prometian al encargado y no le avisaban a
+    // nadie. Una promesa que el sistema no cumple es peor que negarse.
     if (ultimo.estado !== 'pendiente') {
-      return `Su pedido de ${formatKg(ultimo.total_kg)} ya esta ${ultimo.estado} y ya se preparo. Le paso el caso al encargado para ver como le ayudamos.`;
+      const handoff = await this.pasarAPersona({
+        telefono,
+        memoria,
+        motivo: 'modificacion',
+        detalle: `Pide cancelar un pedido ya ${ultimo.estado} de ${formatKg(ultimo.total_kg)} (${formatCurrency(ultimo.total_precio)})`,
+        nombrePerfil,
+        texto
+      });
+      return {
+        respuesta: `Su pedido de ${formatKg(ultimo.total_kg)} ya esta ${ultimo.estado} y ya se preparo. ${handoff.respuesta}`
+      };
     }
 
     try {
       await pedidosService.updateOrderStatus(ultimo.id, 'cancelado');
-      return `Listo, cancele su pedido de ${formatKg(ultimo.total_kg)} por ${formatCurrency(ultimo.total_precio)}. No se le cobra nada. Cuando guste hacemos otro.`;
+      return {
+        respuesta: `Listo, cancele su pedido de ${formatKg(ultimo.total_kg)} por ${formatCurrency(ultimo.total_precio)}. No se le cobra nada. Cuando guste hacemos otro.`
+      };
     } catch (e) {
       console.error('[whatsapp] no se pudo cancelar:', e instanceof Error ? e.message : e);
-      return 'No pude cancelarlo automaticamente. Ya le avise al encargado para que lo haga en este momento.';
+      const handoff = await this.pasarAPersona({
+        telefono,
+        memoria,
+        motivo: 'modificacion',
+        detalle: `Fallo la cancelacion automatica del pedido ${ultimo.id}`,
+        nombrePerfil,
+        texto
+      });
+      return { respuesta: `No pude cancelarlo automaticamente. ${handoff.respuesta}` };
     }
   },
 
@@ -621,6 +669,9 @@ export const whatsappService = {
       memoria,
       nombrePerfil,
       renglones,
+      // El catalogo ya esta leido para resolver nombres y revisar stock: se
+      // pasa para que crear el pedido no vuelva a pedir la misma tabla.
+      catalogo,
       fechaEntrega,
       notas: extraido.notas ?? undefined,
       noEncontrados,
@@ -649,11 +700,7 @@ export const whatsappService = {
       if (!prod) continue;
       const disponible = Number(prod.stock_actual);
 
-      // No se frena por faltar un kilo: casi siempre entra mercancia antes de
-      // la entrega y rechazar por eso perderia ventas. Se escala cuando la
-      // diferencia es grande de verdad — pedir 80 habiendo 30 no se arregla
-      // con un "puede que no tengamos todo".
-      if (r.kg > disponible * 2 && r.kg - disponible > 20) {
+      if (r.kg > disponible * FACTOR_STOCK_INSUFICIENTE && r.kg - disponible > MARGEN_KG_TOLERADO) {
         detalle.push(`${prod.nombre}: piden ${formatKg(r.kg)} y hay ${formatKg(disponible)}`);
         // Al cliente se le dice la cantidad REAL. Un "no tenemos suficiente"
         // sin numero lo deja sin poder decidir; con el numero puede pedir lo
@@ -714,6 +761,7 @@ export const whatsappService = {
     memoria: Memoria;
     nombrePerfil?: string;
     renglones: Renglon[];
+    catalogo?: Awaited<ReturnType<typeof productosService.findAll>>;
     fechaEntrega?: string;
     notas?: string;
     noEncontrados?: string[];
@@ -735,7 +783,8 @@ export const whatsappService = {
         fecha_entrega: fechaEntrega,
         origen: 'whatsapp',
         notas,
-        productos: renglones
+        productos: renglones,
+        catalogo: params.catalogo
       });
 
       let resumen = componerResumen(pedido, warnings, params.noEncontrados ?? [], saludo);
@@ -813,8 +862,11 @@ export const whatsappService = {
   },
 
   /** Catalogo con precios reales. Se arma de la base, sin IA. */
-  async armarCatalogo(saludo: string): Promise<string> {
-    const productos = (await productosService.findAll()).filter((p) => p.activo);
+  async armarCatalogo(
+    saludo: string,
+    catalogo?: Awaited<ReturnType<typeof productosService.findAll>>
+  ): Promise<string> {
+    const productos = (catalogo ?? (await productosService.findAll())).filter((p) => p.activo);
     if (!productos.length) return `${saludo}. En este momento no tengo productos disponibles.`;
 
     const lineas = [`${saludo}! Esto es lo que manejamos hoy:`, ''];
@@ -840,7 +892,9 @@ export const whatsappService = {
       return `${saludo}! El kilo de ${p.nombre} esta en ${formatCurrency(p.precio_kg)}. Cuantos kilos le mando?`;
     }
 
-    return this.armarCatalogo(saludo);
+    // Se le pasa el catalogo ya leido: si no, la caida a "mandar la lista
+    // completa" volvia a consultar la misma tabla en el mismo mensaje.
+    return this.armarCatalogo(saludo, catalogo);
   },
 
   /** Horario desde la configuracion del negocio, sin IA. */
@@ -873,14 +927,9 @@ export const whatsappService = {
         hour12: false
       }).format(new Date());
 
-      const enMinutos = (hhmm: string): number => {
-        const [h, m] = hhmm.split(':').map(Number);
-        return h * 60 + (m || 0);
-      };
-
-      const t = enMinutos(ahora);
-      const abre = enMinutos(config.horario_apertura);
-      const cierra = enMinutos(config.horario_cierre);
+      const t = aMinutos(ahora);
+      const abre = aMinutos(config.horario_apertura);
+      const cierra = aMinutos(config.horario_cierre);
 
       // Si el cierre es menor que la apertura, el turno cruza la medianoche
       // (por ejemplo 22:00 a 06:00) y la comparacion se invierte.
@@ -898,21 +947,22 @@ export const whatsappService = {
   async responder(telefono: string, texto: string, mensajeOrigenId?: string): Promise<void> {
     const envio = await enviarMensaje(telefono, texto);
 
-    await supabase.from('mensajes_whatsapp').insert({
-      telefono,
-      mensaje: texto,
-      tipo: 'bot',
-      wa_message_id: envio.wamid ?? null,
-      procesado: envio.enviado,
-      error: envio.error ?? null
-    });
-
-    if (mensajeOrigenId) {
-      await supabase
-        .from('mensajes_whatsapp')
-        .update({ procesado: true })
-        .eq('id', mensajeOrigenId);
-    }
+    // Las dos escrituras no dependen entre si: guardar lo que dijo el bot y
+    // marcar como atendido el mensaje del cliente son hechos independientes.
+    // En serie se pagaban dos viajes de red donde cabe uno.
+    await Promise.all([
+      supabase.from('mensajes_whatsapp').insert({
+        telefono,
+        mensaje: texto,
+        tipo: 'bot',
+        wa_message_id: envio.wamid ?? null,
+        procesado: envio.enviado,
+        error: envio.error ?? null
+      }),
+      mensajeOrigenId
+        ? supabase.from('mensajes_whatsapp').update({ procesado: true }).eq('id', mensajeOrigenId)
+        : Promise.resolve()
+    ]);
   }
 };
 
