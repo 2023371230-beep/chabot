@@ -113,7 +113,7 @@
     /* Sube de 14 a 16px, que es el cuerpo de referencia. La medicion en el
        panel daba 61 elementos a 13px y 31 a 11px: la etiqueta que explica cada
        numero era el texto mas chico de la pantalla, ilegible a un metro. */
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1.5;
     /* El shell controla su propio scroll: cada region scrollea por dentro. */
     overflow: hidden;
@@ -168,5 +168,48 @@
     border: 3px solid transparent;
     background-clip: content-box;
     border-radius: 99px;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Resplandores del acceso
+   ---------------------------------------------------------------------------
+   Dos derivas de periodos distintos (18s y 23s) para que el ojo no encuentre
+   el ciclo. Un fondo animado que se repite de forma evidente se nota barato;
+   uno cuyo patron no cierra se percibe como profundidad.
+
+   `will-change: transform` mantiene la capa en la GPU: sin ella, animar un
+   blur de 110px repinta en el hilo principal y el formulario se siente pesado
+   al escribir.
+--------------------------------------------------------------------------- */
+@keyframes deriva-lenta {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(6%, 8%, 0) scale(1.12); }
+  100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes deriva-lenta-inversa {
+  0%   { transform: translate3d(0, 0, 0) scale(1.08); }
+  50%  { transform: translate3d(-7%, -5%, 0) scale(1); }
+  100% { transform: translate3d(0, 0, 0) scale(1.08); }
+}
+
+.animate-deriva-lenta {
+  animation: deriva-lenta 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-deriva-lenta-inversa {
+  animation: deriva-lenta-inversa 23s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* El componente ya no monta la animacion con reduced-motion, pero se corta
+   tambien aqui: si alguien reutiliza la clase en otro sitio, la preferencia
+   del sistema se sigue respetando sin que haya que acordarse. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-deriva-lenta,
+  .animate-deriva-lenta-inversa {
+    animation: none;
   }
 }

@@ -9,6 +9,12 @@ import type { Producto } from '@/types/models';
  * Desactivar no borra: saca al producto del catalogo para pedidos nuevos pero
  * conserva su historial. Como esa distincion no es obvia, va escrita en el
  * dialogo en vez de dejarla a la interpretacion del usuario.
+ *
+ * El peso visual esta invertido a proposito respecto a como estaba: editar
+ * lleva texto y quitar se queda en icono. Antes era al reves, y al recorrer la
+ * fila lo que se leia era "Quitar del catalogo" — el sistema anunciaba la
+ * salida en cada renglon, mientras la accion que se usa a diario no tenia
+ * nombre.
  */
 export function ProductActions({
   product,
@@ -22,13 +28,13 @@ export function ProductActions({
   return (
     <div className="flex items-center justify-end gap-1">
       <Button
-        variant="ghost"
-        size="icon"
+        variant="outline"
+        size="sm"
         title={`Editar ${product.nombre}`}
-        aria-label={`Editar ${product.nombre}`}
         onClick={() => onEdit(product)}
       >
         <IconEditar />
+        Editar
       </Button>
 
       {product.activo ? (
@@ -39,9 +45,13 @@ export function ProductActions({
           cancelLabel="No, dejarlo activo"
           onConfirm={() => onToggle(product)}
           trigger={
-            <Button variant="outline" size="sm">
+            <Button
+              variant="ghost"
+              size="icon"
+              title={`Quitar ${product.nombre} del catalogo`}
+              aria-label={`Quitar ${product.nombre} del catalogo`}
+            >
               <IconEncendido />
-              Quitar del catalogo
             </Button>
           }
         />

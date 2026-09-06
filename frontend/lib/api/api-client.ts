@@ -1,3 +1,4 @@
+import { isSupabaseConfigured, supabase } from '@/lib/supabase/supabase-client';
 import type { ApiResponse } from '@/types/api';
 
 /**
@@ -35,11 +36,35 @@ class ApiClient {
     this.baseUrl = baseUrl.replace(/\/$/, '');
   }
 
+  /**
+   * Token de la sesion actual.
+   *
+   * Se pide a Supabase en cada peticion en vez de guardarlo en una variable:
+   * `getSession` devuelve el token vigente y lo renueva solo cuando esta a
+   * punto de vencer. Con una copia en memoria, la primera peticion despues de
+   * una hora saldria con un token caducado y devolveria 401 sin motivo
+   * aparente.
+   */
+  private async token(): Promise<string | null> {
+    if (!isSupabaseConfigured) return null;
+    try {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+    const token = await this.token();
+
     const response = await fetch(`${this.baseUrl}${path}`, {
       method: options.method ?? 'GET',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        // Sin esta cabecera la API responde 401: las rutas del dashboard
+        // verifican la sesion del lado del servidor, no solo en el navegador.
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: options.signal,
@@ -49,6 +74,11 @@ class ApiClient {
     const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
 
     if (!response.ok || !payload?.success) {
+      // Una sesion vencida se nombra por lo que es. El mensaje generico de la
+      // API ("Sesion requerida") no le dice al usuario que tiene que hacer.
+      if (response.status === 401) {
+        throw new Error('Tu sesion expiro. Vuelve a entrar.');
+      }
       throw new Error(formatErrorMessage(payload));
     }
 

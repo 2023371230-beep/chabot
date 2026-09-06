@@ -12,7 +12,8 @@
     "simular:conversaciones": "tsx scripts/simular-conversaciones.ts",
     "simular:real": "tsx scripts/conversacion-real.ts",
     "probar:handoff": "tsx scripts/probar-handoff.ts",
-    "limpiar:pruebas": "tsx scripts/limpiar-pruebas.ts"
+    "limpiar:pruebas": "tsx scripts/limpiar-pruebas.ts",
+    "probar:seguridad": "tsx scripts/probar-seguridad.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

@@ -14,6 +14,13 @@ import { cn } from '@/lib/utils';
  * `hint` se reserva para reglas de negocio que el usuario NO puede deducir
  * mirando el campo. Explicar lo obvio ("cuantos kilos tienes") es ruido: si
  * hace falta una frase para entender un control, el control esta mal hecho.
+ *
+ * `adorno` recibe un elemento que se posiciona sobre el borde derecho del
+ * control (el ojo de "ver contraseña", por ejemplo). Existe como prop en vez
+ * de dejar que cada formulario envuelva el control en su propio <div>: al
+ * envolverlo, el `cloneElement` de abajo le pondria el `id` y el `invalid` al
+ * <div> en vez de al input, y la etiqueta dejaria de enfocar el campo al hacer
+ * clic — un fallo que no se ve pero rompe la accesibilidad.
  */
 export function Field({
   label,
@@ -21,6 +28,7 @@ export function Field({
   error,
   required,
   className,
+  adorno,
   children
 }: {
   label: string;
@@ -28,6 +36,7 @@ export function Field({
   error?: string;
   required?: boolean;
   className?: string;
+  adorno?: React.ReactNode;
   children: React.ReactElement;
 }) {
   const id = React.useId();
@@ -54,7 +63,14 @@ export function Field({
         ) : null}
       </label>
 
-      {control}
+      {adorno ? (
+        <div className="relative">
+          {control}
+          <div className="absolute right-1 top-1/2 -translate-y-1/2">{adorno}</div>
+        </div>
+      ) : (
+        control
+      )}
 
       {/* El error sustituye a la ayuda: dos textos bajo el campo compiten. */}
       {error ? (

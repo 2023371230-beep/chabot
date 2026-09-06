@@ -86,15 +86,15 @@ const config: Config = {
       // densidad se conserva, solo deja de castigar al que lee de lejos o de
       // pie frente al mostrador.
       fontSize: {
-        '2xs': ['12px', { lineHeight: '16px' }],
-        xs: ['13px', { lineHeight: '18px' }],
-        sm: ['15px', { lineHeight: '21px' }],
-        base: ['16px', { lineHeight: '23px' }],
-        md: ['17px', { lineHeight: '25px' }],
-        lg: ['19px', { lineHeight: '26px', letterSpacing: '-0.01em' }],
-        xl: ['22px', { lineHeight: '28px', letterSpacing: '-0.015em' }],
-        '2xl': ['28px', { lineHeight: '33px', letterSpacing: '-0.02em' }],
-        '3xl': ['36px', { lineHeight: '41px', letterSpacing: '-0.025em' }]
+        '2xs': ['13px', { lineHeight: '17px' }],
+        xs: ['14px', { lineHeight: '19px' }],
+        sm: ['16px', { lineHeight: '22px' }],
+        base: ['17px', { lineHeight: '25px' }],
+        md: ['18px', { lineHeight: '26px' }],
+        lg: ['21px', { lineHeight: '28px', letterSpacing: '-0.01em' }],
+        xl: ['24px', { lineHeight: '31px', letterSpacing: '-0.015em' }],
+        '2xl': ['30px', { lineHeight: '36px', letterSpacing: '-0.02em' }],
+        '3xl': ['38px', { lineHeight: '44px', letterSpacing: '-0.025em' }]
       },
       boxShadow: {
         sm: 'var(--shadow-1)',

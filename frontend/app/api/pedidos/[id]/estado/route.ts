@@ -1,4 +1,4 @@
-import { dinamico, leerCuerpo, ok, ruta } from '@/server/http/route';
+import { dinamico, leerCuerpo, ok, rutaPrivada } from '@/server/http/route';
 
 export const dynamic = dinamico;
 import { pedidosService } from '@/server/modules/pedidos/pedidos.service';
@@ -9,7 +9,7 @@ import { updatePedidoEstadoSchema } from '@/server/modules/pedidos/pedidos.schem
  * `updateOrderStatus`, que es la misma funcion que usa el bot de WhatsApp:
  * asi las reglas no pueden divergir entre el dashboard y el chat.
  */
-export const PATCH = ruta(async (req, { params }) => {
+export const PATCH = rutaPrivada(async (req, { params }) => {
   const { estado } = await leerCuerpo<{ estado: 'pendiente' | 'confirmado' | 'completado' | 'cancelado' }>(
     req,
     updatePedidoEstadoSchema

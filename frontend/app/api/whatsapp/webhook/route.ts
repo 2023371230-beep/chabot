@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { env, isWhatsappWebhookConfigured } from '@/server/config/env';
 import { whatsappService } from '@/server/modules/whatsapp/whatsapp.service';
+import { limitarPorIP } from '@/server/http/route';
 import type { MetaWebhookPayload } from '@/server/modules/whatsapp/whatsapp.types';
 
 /**
@@ -108,7 +109,24 @@ const firmaValida = (crudo: string, firma: string | null): boolean => {
  * La ultima es la que permite dormir tranquilo: los reintentos son inofensivos.
  */
 export async function POST(req: Request): Promise<NextResponse> {
+  // Cuota antes de leer el cuerpo y antes de calcular el HMAC.
+  //
+  // Meta manda como mucho unos pocos mensajes por segundo incluso en una hora
+  // punta; 120 por minuto es holgado. Lo que corta es a quien descubre la URL
+  // y la inunda: verificar una firma cuesta CPU, y sin este limite se pagaria
+  // ese calculo por cada peticion basura.
+  const frenado = limitarPorIP(req, 'webhook', { maximo: 120, ventanaMs: 60_000 });
+  if (frenado) return frenado;
+
   const crudo = await req.text();
+
+  // Tope de tamaño. El limite de 8000 tokens/minuto de Groq ya esta cubierto
+  // por el recorte del mensaje, pero un cuerpo de varios megas consume memoria
+  // y tiempo de funcion antes de llegar a ese recorte.
+  if (crudo.length > 128_000) {
+    console.warn('[whatsapp] cuerpo demasiado grande, se descarta');
+    return new NextResponse(null, { status: 200 });
+  }
 
   if (!firmaValida(crudo, req.headers.get('x-hub-signature-256'))) {
     console.warn('[whatsapp] firma invalida: se rechaza el webhook');

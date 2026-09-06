@@ -1,14 +1,14 @@
-import { dinamico, leerCuerpo, ok, ruta } from '@/server/http/route';
+import { dinamico, leerCuerpo, ok, rutaPrivada } from '@/server/http/route';
 
 export const dynamic = dinamico;
 import { inventarioService } from '@/server/modules/inventario/inventario.service';
 import { createInventarioMovimientoSchema } from '@/server/modules/inventario/inventario.schemas';
 
-export const GET = ruta(async () =>
+export const GET = rutaPrivada(async () =>
   ok('Movimientos obtenidos', await inventarioService.findMovimientos())
 );
 
-export const POST = ruta(async (req) =>
+export const POST = rutaPrivada(async (req) =>
   ok(
     'Movimiento registrado',
     await inventarioService.createMovimiento(
