@@ -97,7 +97,7 @@ export const estadoPresupuesto = async () => {
 /**
  * Que le decimos al cliente cuando se cierra una cerca.
  *
- * Nunca se menciona "limite" ni "cuota": al cliente no le importa nuestra
+ * Nunca se menciona "limite" ni "cuota": al cliente no le importa la
  * infraestructura, le importa que alguien le atienda.
  */
 export const mensajeDeEspera = (motivo: 'dia' | 'minuto' | 'telefono'): string => {

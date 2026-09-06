@@ -3,6 +3,7 @@
 > **Documentos hermanos**
 > [DESPLIEGUE.md](DESPLIEGUE.md) — subirlo a Vercel paso a paso
 > [LOGIN.md](LOGIN.md) — crear tu usuario y encender la autenticación
+> [SEGURIDAD.md](SEGURIDAD.md) — qué se cerró, qué queda abierto y por qué
 > [AUDITORIA-UI.md](AUDITORIA-UI.md) — qué se revisó de la interfaz y qué falla
 > [MEJORAS-UI.md](MEJORAS-UI.md) — qué funciona pero cuesta, y qué cambiaría
 
@@ -217,18 +218,19 @@ También hay que decidir cómo manejar conversaciones de varios turnos. La tabla
 `conversaciones_whatsapp` ya existe con su campo `contexto` (JSONB) y su
 máquina de estados, pero **nadie la usa todavía**.
 
-### 🔴 Autenticación de la API
+### ✅ Autenticación de la API (hecha)
 
-**No hay ninguna.** El webhook sí está cerrado (firma HMAC verificada; probado:
-un POST sin firmar recibe 401), pero `/api/pedidos` y `/api/productos` están
-abiertas a quien conozca el dominio. Y confirmar un pedido **descuenta stock
-real**.
+**17 rutas exigen sesión.** El token de Supabase se verifica del lado del
+servidor antes de tocar la base. Quedan abiertas `/api/health` y el webhook de
+Meta, las dos con cuota por IP.
 
-En localhost da igual. **Desplegado en Vercel es crítico**, porque la URL es
-pública y estable.
+Verificado con `npm run probar:seguridad`: 14 de 14. Sin token → 401; con token
+válido → 200; con la firma alterada → 401; un token forjado con `alg: none` →
+401. Detalle completo en [SEGURIDAD.md](SEGURIDAD.md).
 
-Lo que falta: proteger las rutas de `app/api/**` con el JWT de Supabase, y
-quitar `NEXT_PUBLIC_DISABLE_AUTH`.
+**Lo que sigue pendiente de seguridad:** la sesión vive en `localStorage`, así
+que un XSS la expone. La CSP lo mitiga; la solución de fondo es pasarla a
+cookies `HttpOnly` con `@supabase/ssr`.
 
 ### 🟡 Backend no aprovecha el esquema nuevo
 

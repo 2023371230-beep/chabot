@@ -20,8 +20,8 @@ import { AppError } from '../shared/errors/AppError';
  * aqui se valida contra el servidor de autenticacion de Supabase, que es quien
  * tiene la llave de firma.
  *
- * Se valida con `getUser(token)` en vez de decodificar el JWT por nuestra
- * cuenta a proposito. Decodificar a mano es donde aparecen los fallos clasicos
+ * Se valida con `getUser(token)` en vez de decodificar el JWT por cuenta
+ * propia a proposito. Decodificar a mano es donde aparecen los fallos clasicos
  * de JWT: confusion de algoritmos (cambiar `alg` de RS256 a HS256 y firmar con
  * la clave publica), el algoritmo `none`, o inyeccion por el parametro `kid`.
  * Delegar la verificacion en quien emitio el token elimina esa familia entera

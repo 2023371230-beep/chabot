@@ -54,7 +54,7 @@ const ETIQUETA: Record<MotivoHandoff, string> = {
 
 /**
  * Lo que se le dice al cliente. Nunca menciona la palabra "bot", "sistema" ni
- * "limite": al cliente no le importa nuestra infraestructura, le importa que
+ * "limite": al cliente no le importa la infraestructura, le importa que
  * alguien le atienda y saber cuanto va a esperar.
  */
 const RESPUESTA: Record<MotivoHandoff, string> = {

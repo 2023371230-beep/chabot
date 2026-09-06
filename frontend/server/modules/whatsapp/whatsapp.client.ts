@@ -51,7 +51,7 @@ export const enviarMensaje = async (
         recipient_type: 'individual',
         to: normalizarTelefono(telefono),
         type: 'text',
-        // preview_url false: si el cliente pide "pollo.com" no queremos que
+        // preview_url false: si el cliente pide "pollo.com" no conviene que
         // WhatsApp pinte una tarjeta de link en la respuesta.
         text: { preview_url: false, body: mensaje }
       })

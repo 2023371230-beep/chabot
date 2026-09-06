@@ -145,7 +145,7 @@ export const alFallar = (error: unknown): NextResponse => {
     );
   }
 
-  // Un error que no es AppError es un fallo nuestro, no del cliente. Se
+  // Un error que no es AppError es un fallo del servidor, no del cliente. Se
   // registra completo en el servidor y hacia afuera sale un mensaje neutro.
   console.error('[api] error no controlado:', error);
   return NextResponse.json(

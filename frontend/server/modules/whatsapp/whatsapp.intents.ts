@@ -267,7 +267,7 @@ export type IntencionRapida =
       tipo: 'humano';
       motivo: 'queja' | 'solicitud' | 'enojo' | 'negociacion' | 'logistica';
     }
-  /** Solo un numero: "20". Responde a una pregunta anterior nuestra. */
+  /** Solo un numero: "20". Responde a una pregunta anterior del bot. */
   | { tipo: 'solo_numero'; valor: number }
   | { tipo: 'demasiado_largo' }
   | { tipo: 'usar_ia'; traeSaludo: boolean };
@@ -285,7 +285,7 @@ export const clasificar = (texto: string): IntencionRapida => {
   const t = normalizar(crudo);
 
   // 0. Sin contenido util. Un "👍" no merece respuesta: contestarlo es ruido
-  //    para el cliente y una peticion tirada para nosotros.
+  //    para el cliente y una peticion tirada para el sistema.
   if (!t) return { tipo: 'ignorar' };
 
   // 0b. Demasiado largo para ser un pedido. Se corta aqui para que no se
@@ -309,7 +309,7 @@ export const clasificar = (texto: string): IntencionRapida => {
   if (ESTADO_PEDIDO.some((r) => r.test(t))) return { tipo: 'estado_pedido' };
   if (REPETIR.some((r) => r.test(t))) return { tipo: 'repetir' };
 
-  // 3. Respuestas a una pregunta nuestra. Solo en mensajes cortos y sin
+  // 3. Respuestas a una pregunta del bot. Solo en mensajes cortos y sin
   //    cifras ni cortes: "si" es una confirmacion, pero "si tienes pechuga
   //    mandame 10" es un pedido.
   if (
@@ -328,7 +328,7 @@ export const clasificar = (texto: string): IntencionRapida => {
   }
 
   // 4. Datos que ya viven en la base: contestarlos con IA seria pagar por algo
-  //    que ya tenemos, con el riesgo extra de que el modelo lo invente.
+  //    que ya esta en la base, con el riesgo extra de que el modelo lo invente.
   if (PIDE_CATALOGO.some((r) => r.test(t))) return { tipo: 'catalogo' };
   if (PIDE_HORARIO.some((r) => r.test(t))) return { tipo: 'horario' };
 

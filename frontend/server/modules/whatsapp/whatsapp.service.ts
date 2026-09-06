@@ -124,7 +124,7 @@ export const whatsappService = {
     );
 
     // Respuesta vacia = decision deliberada de no contestar (un "👍" suelto).
-    // Contestar cada emoji es ruido para el cliente y trabajo para nosotros.
+    // Contestar cada emoji es ruido para el cliente y trabajo de mas.
     if (!respuesta) {
       await supabase.from('mensajes_whatsapp').update({ procesado: true }).eq('id', guardado.id);
       return { ...base, procesado: true, motivo: 'Sin respuesta necesaria' };
@@ -144,13 +144,13 @@ export const whatsappService = {
    * para que las reglas no puedan contradecirse.
    */
   async atender(texto: string, telefono: string, nombrePerfil?: string): Promise<Atencion> {
-    // 0. Si una persona ya tomo este chat, el bot se calla. Contestar por
-    //    debajo del asesor haria que el cliente vea dos voces distintas
-    //    diciendo cosas distintas en la misma conversacion.
-    // La memoria se lee UNA vez por mensaje. Esa misma lectura contesta si el
-    // chat esta pausado, asi que no cuesta una consulta aparte.
+    // 0. La memoria se lee UNA vez por mensaje, y esa misma lectura dice si el
+    //    chat esta pausado: no cuesta una consulta aparte.
+    //
+    //    Si una persona ya tomo el chat, el bot se calla. Contestar por debajo
+    //    del asesor haria que el cliente vea dos voces distintas diciendo
+    //    cosas distintas en la misma conversacion.
     const memoria = await Memoria.cargar(telefono);
-
     if (memoria.pausada) return { respuesta: '' };
 
     // 1. El cliente reenvio el mismo texto porque no vio la palomita. Se le
@@ -490,7 +490,7 @@ export const whatsappService = {
     traeSaludo: boolean
   ): Promise<Atencion> {
     // Racionamiento: si ya no hay cuota, se pasa a una persona en vez de
-    // fallar. El cliente no tiene por que enterarse de nuestros limites.
+    // fallar. El cliente no tiene por que enterarse de los limites del sistema.
     const cuota = await puedeUsarIA(telefono);
     if (!cuota.permitido) {
       console.warn(`[whatsapp] sin cuota de IA (${cuota.motivo}) para ${telefono}`);
@@ -828,7 +828,7 @@ export const whatsappService = {
 
   /**
    * Contesta cuanto cuesta un corte. El precio esta en la base: preguntarselo
-   * a la IA seria gastar una peticion en un dato que ya tenemos, con el riesgo
+   * a la IA seria gastar una peticion en un dato que ya esta en la base, con el riesgo
    * de que lo invente.
    */
   async armarPrecio(texto: string, saludo: string): Promise<string> {

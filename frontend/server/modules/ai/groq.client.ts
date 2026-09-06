@@ -12,7 +12,7 @@ export const isGroqConfigured = (): boolean => Boolean(env.groqApiKey);
  *
  * Una extraccion normal tarda ~1.5 s. Sin este tope, un mal dia de Groq deja
  * la peticion colgada hasta que Vercel corta la funcion a los 30 s: el cliente
- * se queda mirando WhatsApp sin respuesta medio minuto, y nosotros pagamos ese
+ * se queda mirando WhatsApp sin respuesta medio minuto, y se paga ese
  * tiempo de ejecucion. Doce segundos son de sobra para el peor caso normal.
  */
 const ESPERA_MAXIMA_MS = 12_000;

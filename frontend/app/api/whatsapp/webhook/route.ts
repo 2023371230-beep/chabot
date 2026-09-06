@@ -138,7 +138,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     await whatsappService.procesarWebhook(payload);
   } catch (error) {
     // Se registra pero se responde 200 igual. Un 4xx o 5xx hace que Meta
-    // reintente el MISMO mensaje una y otra vez, y si el fallo es nuestro el
+    // reintente el MISMO mensaje una y otra vez, y si el fallo es del servidor el
     // reintento va a fallar igual: seria un bucle infinito sin ganar nada.
     console.error(
       '[whatsapp] fallo procesando el webhook:',
