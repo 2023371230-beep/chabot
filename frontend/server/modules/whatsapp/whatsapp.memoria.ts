@@ -97,7 +97,9 @@ export class Memoria {
     private readonly conversacionId: string | null,
     private sucia = false,
     /** true si en este mensaje el chat pasa a manos de una persona. */
-    private escalando = false
+    private escalando = false,
+    /** Minutos de silencio a aplicar al guardar. 0 = no tocar la pausa. */
+    private silencioMinutos = 0
   ) {}
 
   /**
@@ -110,7 +112,7 @@ export class Memoria {
   static async cargar(telefono: string): Promise<Memoria> {
     const { data, error } = await supabase
       .from('conversaciones_whatsapp')
-      .select('id, estado, contexto')
+      .select('id, estado, contexto, pausado_hasta')
       .eq('telefono', telefono)
       .neq('estado', 'cerrada')
       .is('deleted_at', null)
@@ -121,9 +123,16 @@ export class Memoria {
       return new Memoria(telefono, false, {}, null);
     }
 
+    // "Callado" ya no es lo mismo que "escalado". Un chat puede seguir en la
+    // bandeja esperando a una persona y, pasadas las horas de silencio, dejar
+    // que el bot vuelva a tomar pedidos: mejor eso que dejar mudo al cliente
+    // para siempre porque nadie se acordo de reactivarlo.
+    const hasta = data?.pausado_hasta as string | null | undefined;
+    const callado = Boolean(hasta && new Date(hasta).getTime() > Date.now());
+
     return new Memoria(
       telefono,
-      data?.estado === 'escalado_humano',
+      callado,
       (data?.contexto ?? {}) as Contexto,
       (data?.id as string) ?? null
     );
@@ -141,6 +150,8 @@ export class Memoria {
     detalle?: string;
     nombreCliente?: string;
     ultimoMensaje?: string;
+    /** Cuanto se calla el bot. Se aplica en la misma escritura del contexto. */
+    silencioMinutos?: number;
   }): void {
     this.ctx.motivo = datos.motivo;
     this.ctx.detalle = datos.detalle;
@@ -148,6 +159,7 @@ export class Memoria {
     this.ctx.ultimo_mensaje = datos.ultimoMensaje;
     this.ctx.pausado_en = new Date().toISOString();
     this.escalando = true;
+    this.silencioMinutos = datos.silencioMinutos ?? 0;
     this.cambio();
   }
 
@@ -158,12 +170,22 @@ export class Memoria {
     const ahora = new Date().toISOString();
     const estado = this.escalando ? 'escalado_humano' : undefined;
 
+    // El silencio viaja en la MISMA escritura que el contexto. Si se hiciera
+    // aparte, las dos operaciones competirian por la misma fila y la ultima
+    // borraria lo que escribio la primera — que es exactamente el fallo que se
+    // arreglo cuando el handoff escribia por su cuenta.
+    const pausadoHasta =
+      this.silencioMinutos > 0
+        ? new Date(Date.now() + this.silencioMinutos * 60_000).toISOString()
+        : undefined;
+
     if (this.conversacionId) {
       const { error } = await supabase
         .from('conversaciones_whatsapp')
         .update({
           contexto: this.ctx,
           ...(estado ? { estado } : {}),
+          ...(pausadoHasta ? { pausado_hasta: pausadoHasta } : {}),
           ultimo_mensaje_at: ahora,
           updated_at: ahora
         })
@@ -175,7 +197,8 @@ export class Memoria {
     const { error } = await supabase.from('conversaciones_whatsapp').insert({
       telefono: this.telefono,
       estado: estado ?? 'abierta',
-      contexto: this.ctx
+      contexto: this.ctx,
+      ...(pausadoHasta ? { pausado_hasta: pausadoHasta } : {})
     });
 
     // Dos mensajes del mismo cliente casi al mismo tiempo pueden intentar

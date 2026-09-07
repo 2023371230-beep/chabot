@@ -13,8 +13,16 @@ import { supabase } from '../../database/supabase.client';
 /** Un mensaje ya listo para pintarse como burbuja. */
 export type MensajeChat = {
   id: string;
-  /** `cliente` va a la izquierda, `bot` a la derecha, `sistema` al centro. */
-  tipo: 'cliente' | 'bot' | 'sistema';
+  /**
+   * Quien lo dijo, y por tanto de que lado va.
+   *
+   * `cliente` a la izquierda; `bot` y `asesor` a la derecha, porque los dos
+   * son "nosotros" desde el punto de vista del cliente, pero se distinguen
+   * entre si — el dia que se revise por que alguien se molesto hay que poder
+   * saber que dijo el asistente y que dijo una persona. `sistema` va al centro:
+   * no lo dijo nadie, le paso a la conversacion.
+   */
+  tipo: 'cliente' | 'bot' | 'asesor' | 'sistema';
   texto: string;
   en: string;
   /** Presente solo en los del bot que no salieron. */
@@ -31,6 +39,8 @@ export type ConversacionResumen = {
   totalMensajes: number;
   /** true si el bot esta detenido en ese chat esperando a una persona. */
   pausada: boolean;
+  /** Cuando escribio el cliente por ultima vez. Decide la ventana de 24 h. */
+  ultimoDelCliente: string | null;
 };
 
 type FilaMensaje = {
@@ -41,9 +51,13 @@ type FilaMensaje = {
   error: string | null;
 };
 
+const TIPOS_CONOCIDOS = new Set(['cliente', 'bot', 'asesor', 'sistema']);
+
 const aChat = (f: FilaMensaje): MensajeChat => ({
   id: f.id,
-  tipo: (f.tipo === 'bot' || f.tipo === 'sistema' ? f.tipo : 'cliente') as MensajeChat['tipo'],
+  // Un tipo que no se reconozca cae a 'cliente': pintarlo del lado del negocio
+  // seria peor, porque atribuiria al negocio algo que no dijo.
+  tipo: (TIPOS_CONOCIDOS.has(f.tipo) ? f.tipo : 'cliente') as MensajeChat['tipo'],
   texto: f.mensaje,
   en: f.created_at,
   error: f.error
@@ -140,12 +154,20 @@ export const listarConversaciones = async (limite = 500): Promise<ConversacionRe
         ultimoMensaje: m.mensaje as string,
         ultimoEn: m.created_at as string,
         totalMensajes: 0,
-        pausada: false
+        pausada: false,
+        ultimoDelCliente: null
       };
       porTelefono.set(tel, conv);
     }
 
     conv.totalMensajes += 1;
+
+    // Los mensajes vienen del mas nuevo al mas viejo, asi que el PRIMERO del
+    // cliente que se ve es el mas reciente. Es el que abre la ventana de 24 h
+    // en la que Meta permite responder con texto libre.
+    if (m.tipo === 'cliente' && !conv.ultimoDelCliente) {
+      conv.ultimoDelCliente = m.created_at as string;
+    }
   }
 
   const telefonos = [...porTelefono.keys()];

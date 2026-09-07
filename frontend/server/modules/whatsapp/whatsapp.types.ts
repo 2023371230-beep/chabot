@@ -32,6 +32,24 @@ export type MetaStatus = {
   recipient_id?: string;
 };
 
+/**
+ * Un mensaje que salio del numero del negocio desde OTRA superficie.
+ *
+ * Meta lo manda cuando alguien contesta desde la app de WhatsApp Business o
+ * desde el Business Suite, no desde esta API. Es la señal de que el dueño
+ * agarro su celular: en cuanto llega, el bot debe callarse en ese chat para no
+ * competir con quien ya esta atendiendo.
+ */
+export type MetaEcho = {
+  id?: string;
+  /** A quien se le mando. */
+  to?: string;
+  recipient_id?: string;
+  timestamp?: string;
+  type?: string;
+  text?: { body: string };
+};
+
 export type MetaWebhookPayload = {
   object?: string;
   entry?: Array<{
@@ -44,9 +62,48 @@ export type MetaWebhookPayload = {
         contacts?: MetaContact[];
         messages?: MetaTextMessage[];
         statuses?: MetaStatus[];
+        message_echoes?: MetaEcho[];
       };
     }>;
   }>;
+};
+
+/** Un eco ya aplanado: a quien y que se le dijo. */
+export type EcoSaliente = {
+  telefono: string;
+  texto: string;
+  wamid: string | null;
+  en: Date;
+};
+
+/**
+ * Aplana los ecos del payload.
+ *
+ * Van aparte de `extraerMensajes` a proposito: un eco NO es un mensaje
+ * entrante. Tratarlos igual haria que el bot intentara "atender" lo que acaba
+ * de decir una persona, que es exactamente lo contrario de lo que debe pasar.
+ */
+export const extraerEcos = (payload: MetaWebhookPayload): EcoSaliente[] => {
+  const salida: EcoSaliente[] = [];
+
+  for (const entry of payload.entry ?? []) {
+    for (const change of entry.changes ?? []) {
+      for (const e of change.value?.message_echoes ?? []) {
+        const telefono = e.to ?? e.recipient_id;
+        if (!telefono) continue;
+
+        salida.push({
+          telefono,
+          texto: e.text?.body?.trim() ?? `[${e.type ?? 'mensaje'}]`,
+          wamid: e.id ?? null,
+          // El timestamp de Meta viene en SEGUNDOS.
+          en: new Date(Number(e.timestamp ?? 0) * 1000 || Date.now())
+        });
+      }
+    }
+  }
+
+  return salida;
 };
 
 /** Un mensaje entrante ya aplanado y listo para trabajar. */
@@ -97,12 +154,18 @@ export const extraerMensajes = (payload: MetaWebhookPayload): MensajeEntrante[] 
   return salida;
 };
 
-/** true si el payload solo trae acuses de entrega, no mensajes de nadie. */
+/**
+ * true si el payload solo trae acuses de entrega.
+ *
+ * Los ecos cuentan como contenido: no son mensajes entrantes, pero si hay que
+ * actuar sobre ellos.
+ */
 export const esSoloEstados = (payload: MetaWebhookPayload): boolean => {
   let hayEstados = false;
   for (const entry of payload.entry ?? []) {
     for (const change of entry.changes ?? []) {
       if (change.value?.messages?.length) return false;
+      if (change.value?.message_echoes?.length) return false;
       if (change.value?.statuses?.length) hayEstados = true;
     }
   }

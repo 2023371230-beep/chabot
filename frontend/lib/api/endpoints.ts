@@ -63,6 +63,12 @@ export const endpoints = {
     // El hilo completo de un telefono.
     conversacion: (telefono: string) =>
       api.get<MensajeChat[]>(`/whatsapp/conversaciones/${encodeURIComponent(telefono)}`),
+    // Responder al cliente desde el panel. Calla al bot dos horas.
+    responder: (telefono: string, texto: string) =>
+      api.post<MensajeChat>(
+        `/whatsapp/conversaciones/${encodeURIComponent(telefono)}/mensajes`,
+        { texto }
+      ),
     reanudar: (telefono: string) =>
       api.post<{ telefono: string; reanudado: boolean }>(
         `/whatsapp/handoffs/${encodeURIComponent(telefono)}/reanudar`,

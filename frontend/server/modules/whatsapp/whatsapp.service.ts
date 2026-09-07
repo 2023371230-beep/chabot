@@ -12,9 +12,12 @@ import { enviarMensaje, marcarComoLeido } from './whatsapp.client';
 import { puedeUsarIA, registrarUso } from './whatsapp.presupuesto';
 import { pausar, type MotivoHandoff } from './whatsapp.handoff';
 import { firmaPedido, Memoria, type Renglon } from './whatsapp.memoria';
+import { MINUTOS_SILENCIO, silenciar } from './whatsapp.silencio';
 import {
   esSoloEstados,
+  extraerEcos,
   extraerMensajes,
+  type EcoSaliente,
   type MensajeEntrante,
   type MetaWebhookPayload
 } from './whatsapp.types';
@@ -73,6 +76,13 @@ export const whatsappService = {
     // Los acuses de entrega llegan por el mismo canal que los mensajes. Si se
     // trataran igual, el bot se responderia a si mismo en bucle.
     if (esSoloEstados(payload)) return [];
+
+    // Los ecos van PRIMERO: si el dueño acaba de contestar desde su celular,
+    // el bot tiene que callarse antes de tocar cualquier mensaje entrante que
+    // venga en el mismo payload.
+    for (const eco of extraerEcos(payload)) {
+      await this.registrarEco(eco);
+    }
 
     const mensajes = extraerMensajes(payload);
     const resultados: ResultadoMensaje[] = [];
@@ -153,6 +163,63 @@ export const whatsappService = {
   },
 
   /**
+   * Deja constancia de un posible pedido llegado a un chat en silencio.
+   *
+   * El bot no contesta — hay una persona al mando — pero un pedido que entra
+   * mientras nadie mira es una venta perdida sin rastro. La marca aparece en
+   * el hilo del dashboard, donde quien atiende el chat la va a ver.
+   *
+   * Solo se registra si el clasificador cree que hay intencion de compra: un
+   * "gracias" en un chat callado no necesita alarma.
+   */
+  async avisarIntentoEnChatCallado(texto: string, telefono: string): Promise<void> {
+    if (clasificar(texto).tipo !== 'usar_ia') return;
+
+    const { error } = await supabase.from('mensajes_whatsapp').insert({
+      telefono,
+      mensaje: '[ATENCION] Posible pedido recibido mientras el asistente estaba en pausa',
+      tipo: 'sistema',
+      procesado: false
+    });
+
+    if (error) console.error('[whatsapp] no se pudo marcar el intento:', error.message);
+  },
+
+  /**
+   * Alguien contesto desde fuera de este sistema.
+   *
+   * Meta avisa con un "eco" cuando sale un mensaje del numero del negocio por
+   * otra via — la app de WhatsApp Business en el celular del dueño, o el
+   * Business Suite. Es la señal de que una persona ya esta atendiendo ese chat.
+   *
+   * En ese momento el bot se calla dos horas. Sin esto, el dueño escribe desde
+   * su telefono, el cliente responde, y el bot le contesta encima: dos voces
+   * distintas diciendo cosas distintas, que es justo lo que la funcion de
+   * handoff existe para evitar.
+   *
+   * El mensaje se guarda como 'asesor' para que aparezca en el hilo del
+   * dashboard. Si no, la conversacion tendria huecos inexplicables: el cliente
+   * respondiendo a algo que en el historial nadie dijo.
+   */
+  async registrarEco(eco: EcoSaliente): Promise<void> {
+    await silenciar(eco.telefono, MINUTOS_SILENCIO.intervencion, false);
+
+    const { error } = await supabase.from('mensajes_whatsapp').insert({
+      telefono: eco.telefono,
+      mensaje: eco.texto,
+      tipo: 'asesor',
+      wa_message_id: eco.wamid,
+      procesado: true
+    });
+
+    // El UNIQUE sobre wa_message_id corta los reintentos de Meta: el eco de un
+    // mensaje que ya se guardo no es un fallo.
+    if (error && error.code !== DUPLICADO) {
+      console.error('[whatsapp] no se pudo guardar el eco:', error.message);
+    }
+  },
+
+  /**
    * Marca que estos mensajes fueron los que llevaron a este pedido.
    *
    * La regla no necesita ventanas de tiempo: se reclaman los mensajes de ese
@@ -197,7 +264,14 @@ export const whatsappService = {
     //    del asesor haria que el cliente vea dos voces distintas diciendo
     //    cosas distintas en la misma conversacion.
     const memoria = await Memoria.cargar(telefono);
-    if (memoria.pausada) return { respuesta: '' };
+
+    if (memoria.pausada) {
+      // Callado no es sordo. Si el cliente escribe algo que parece un pedido
+      // mientras una persona lleva el chat, se deja constancia para que no se
+      // pierda una venta por estar el bot en silencio.
+      await this.avisarIntentoEnChatCallado(texto, telefono);
+      return { respuesta: '' };
+    }
 
     // 1. El cliente reenvio el mismo texto porque no vio la palomita. Se le
     //    repite lo que ya se le contesto en vez de procesarlo otra vez.

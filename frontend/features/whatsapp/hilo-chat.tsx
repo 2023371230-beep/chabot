@@ -89,6 +89,7 @@ function Burbuja({
   quieto: boolean | null;
 }) {
   const delCliente = mensaje.tipo === 'cliente';
+  const delAsesor = mensaje.tipo === 'asesor';
 
   return (
     <motion.div
@@ -110,11 +111,20 @@ function Burbuja({
       <div
         className={cn(
           'max-w-[min(30rem,85%)] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
-          delCliente
-            ? 'rounded-bl-md border border-border bg-surface-2'
-            : 'rounded-br-md bg-primary/15 text-foreground'
+          delCliente && 'rounded-bl-md border border-border bg-surface-2',
+          // El asesor va del mismo lado que el bot — los dos son "nosotros"
+          // para el cliente — pero en otro color y con su etiqueta. El dia que
+          // se revise por que alguien se molesto hay que poder distinguir que
+          // dijo el asistente y que dijo una persona.
+          !delCliente && (delAsesor ? 'rounded-br-md bg-info/15' : 'rounded-br-md bg-primary/15'),
+          !delCliente && 'text-foreground'
         )}
       >
+        {delAsesor ? (
+          <p className="mb-1 text-2xs font-medium uppercase tracking-[0.06em] text-info">
+            Asesor
+          </p>
+        ) : null}
         {/* `whitespace-pre-line`: los resumenes del bot vienen con saltos de
             linea que SON el formato — un pedido de tres cortes en un parrafo
             corrido no se lee. */}

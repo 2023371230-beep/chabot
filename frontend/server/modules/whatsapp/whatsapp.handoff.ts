@@ -2,6 +2,7 @@ import { supabase } from '../../database/supabase.client';
 import { env } from '../../config/env';
 import { enviarMensaje } from './whatsapp.client';
 import { ETIQUETA_MOTIVO, recortar, type MotivoHandoff } from '../../../lib/handoff';
+import { MINUTOS_SILENCIO, reactivar } from './whatsapp.silencio';
 
 /**
  * El apagado controlado del bot.
@@ -42,6 +43,7 @@ export type MemoriaEscalable = {
     detalle?: string;
     nombreCliente?: string;
     ultimoMensaje?: string;
+    silencioMinutos?: number;
   }): void;
 };
 
@@ -145,7 +147,17 @@ export const pausar = async (params: {
 }): Promise<string> => {
   const { telefono, memoria, motivo, detalle, nombreCliente, ultimoMensaje } = params;
 
-  memoria.marcarEscalado({ motivo, detalle, nombreCliente, ultimoMensaje });
+  // Escalar hace DOS cosas: mete el chat en la bandeja (hasta que alguien lo
+  // resuelva) y calla al bot 12 horas. Pasadas esas horas el bot vuelve a
+  // tomar pedidos — mejor eso que silencio eterno — pero el chat sigue en la
+  // bandeja para que nadie olvide el reclamo.
+  memoria.marcarEscalado({
+    motivo,
+    detalle,
+    nombreCliente,
+    ultimoMensaje,
+    silencioMinutos: MINUTOS_SILENCIO.handoff
+  });
 
   try {
     // El rastro y el aviso son independientes: no hay razon para esperar uno
@@ -257,19 +269,11 @@ export const listarPendientes = async (): Promise<ChatPausado[]> => {
  * seguir pidiendo con normalidad.
  */
 export const reanudar = async (telefono: string): Promise<boolean> => {
-  const { error } = await supabase
-    .from('conversaciones_whatsapp')
-    .update({
-      estado: 'abierta',
-      updated_at: new Date().toISOString()
-    })
-    .eq('telefono', telefono)
-    .eq('estado', 'escalado_humano');
-
-  if (error) {
-    console.error('[handoff] no se pudo reanudar:', error.message);
-    return false;
-  }
+  // Limpia las DOS cosas de una vez: sale de la bandeja y deja de estar
+  // callado. Antes solo cambiaba el estado, asi que el bot seguia mudo hasta
+  // que caducara la pausa aunque el asesor ya hubiera terminado.
+  const ok = await reactivar(telefono);
+  if (!ok) return false;
 
   await supabase.from('mensajes_whatsapp').insert({
     telefono,

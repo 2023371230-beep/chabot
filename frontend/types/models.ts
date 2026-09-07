@@ -115,7 +115,7 @@ export type ChatPausado = {
  */
 export type MensajeChat = {
   id: string;
-  tipo: 'cliente' | 'bot' | 'sistema';
+  tipo: 'cliente' | 'bot' | 'asesor' | 'sistema';
   texto: string;
   en: string;
   error: string | null;
@@ -130,4 +130,5 @@ export type ConversacionResumen = {
   ultimoEn: string;
   totalMensajes: number;
   pausada: boolean;
+  ultimoDelCliente: string | null;
 };

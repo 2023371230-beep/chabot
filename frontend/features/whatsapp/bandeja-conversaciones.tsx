@@ -10,6 +10,7 @@ import { endpoints } from '@/lib/api/endpoints';
 import { useApi } from '@/hooks/use-api';
 import { cn } from '@/lib/utils';
 import { HiloChat } from './hilo-chat';
+import { ResponderCliente } from './responder-cliente';
 
 /**
  * La bandeja de conversaciones.
@@ -127,7 +128,13 @@ export function BandejaConversaciones() {
             {/* HILO */}
             <div className={cn('min-w-0', !abierta && 'hidden lg:block')}>
               {abierta ? (
-                <Hilo telefono={abierta} onVolver={() => setAbierta(null)} />
+                <Hilo
+                  telefono={abierta}
+                  ultimoDelCliente={
+                    conversaciones.find((c) => c.telefono === abierta)?.ultimoDelCliente ?? null
+                  }
+                  onVolver={() => setAbierta(null)}
+                />
               ) : (
                 <div className="flex h-full min-h-[16rem] items-center justify-center rounded-lg border border-dashed border-border">
                   <p className="px-6 text-center text-sm text-muted-foreground">
@@ -143,7 +150,15 @@ export function BandejaConversaciones() {
   );
 }
 
-function Hilo({ telefono, onVolver }: { telefono: string; onVolver: () => void }) {
+function Hilo({
+  telefono,
+  ultimoDelCliente,
+  onVolver
+}: {
+  telefono: string;
+  ultimoDelCliente: string | null;
+  onVolver: () => void;
+}) {
   const hilo = useApi(
     () => endpoints.whatsapp.conversacion(telefono),
     [telefono],
@@ -171,13 +186,22 @@ function Hilo({ telefono, onVolver }: { telefono: string; onVolver: () => void }
         </a>
       </div>
 
-      <div className="max-h-[30rem] min-h-[16rem] overflow-y-auto p-3">
+      <div className="max-h-[26rem] min-h-[14rem] overflow-y-auto p-3">
         {hilo.loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Cargando el chat...</p>
         ) : (
           <HiloChat mensajes={hilo.data ?? []} autoScroll />
         )}
       </div>
+
+      <ResponderCliente
+        telefono={telefono}
+        ultimoDelCliente={ultimoDelCliente}
+        // El mensaje se añade al hilo sin volver a pedirlo: ya se sabe que se
+        // envio y esperar una ida y vuelta para verlo hace que el chat se
+        // sienta lento justo en el momento en que mas atencion tiene.
+        onEnviado={(mensaje) => hilo.setData([...(hilo.data ?? []), mensaje])}
+      />
     </div>
   );
 }
