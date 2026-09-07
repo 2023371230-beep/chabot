@@ -63,8 +63,8 @@ function Indicador({
 export default function ReportesPage() {
   const [periodo, setPeriodo] = useState<Periodo>('mes');
   const [vista, setVista] = useState<'resumen' | 'detalle'>('resumen');
-  const orders = useApi(() => endpoints.pedidos.list(), []);
-  const inventory = useApi(() => endpoints.inventario.resumen(), []);
+  const orders = useApi(() => endpoints.pedidos.list(), [], 'pedidos');
+  const inventory = useApi(() => endpoints.inventario.resumen(), [], 'inventario-resumen');
 
   const loading = orders.loading || inventory.loading;
   const error = orders.error ?? inventory.error;

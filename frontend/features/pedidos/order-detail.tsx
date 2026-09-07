@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type Column } from '@/components/shared/data-table';
 import { MetricCard } from '@/components/shared/metric-card';
 import { StatusBadge } from '@/components/shared/status-badge';
+import { ConversacionDelPedido } from '@/features/pedidos/conversacion-del-pedido';
 import { formatCurrency, formatDate, formatKg } from '@/lib/formatters';
 import type { Pedido, PedidoDetalle } from '@/types/models';
 
@@ -26,14 +27,21 @@ export function OrderDetail({ order }: { order: Pedido }) {
         <MetricCard title="Entrega" value={formatDate(order.fecha_entrega)} icon={IconCalendario} variant="info" />
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <Card>
-          <CardHeader>
-            <CardTitle>Productos del pedido</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DataTable data={details} columns={columns} />
-          </CardContent>
-        </Card>
+        {/* Los productos y la conversacion van juntos en la columna ancha: el
+            "que se pidio" y el "por que se pidio asi" son la misma pregunta,
+            y separarlos obligaria a mirar a dos sitios para responderla. */}
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Productos del pedido</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable data={details} columns={columns} />
+            </CardContent>
+          </Card>
+
+          <ConversacionDelPedido pedido={order} />
+        </div>
         <Card>
           <CardHeader>
             <CardTitle>Cliente y estado</CardTitle>

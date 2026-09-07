@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { motion, useReducedMotion } from 'framer-motion';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
@@ -16,6 +17,26 @@ import { MobileMenu } from './mobile-menu';
 
 export function TopNavbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const quieto = useReducedMotion();
+
+  /**
+   * Ruta a la que se acaba de tocar, antes de que Next la confirme.
+   *
+   * Sin esto, la pestaña activa solo cambiaba cuando la ruta terminaba de
+   * montar Y sus datos llegaban. Entre el dedo y la respuesta habia hasta
+   * medio segundo en el que la pantalla no acusaba nada: se sentia como si el
+   * toque no se hubiera registrado, y la reaccion natural es volver a tocar.
+   *
+   * Aqui la pestaña se mueve en el mismo cuadro del toque. Es la regla de
+   * Apple: responder al pointer-down, no al resultado.
+   */
+  const [tocada, setTocada] = useState<string | null>(null);
+
+  // Cuando la ruta real alcanza a la tocada, se suelta el optimismo.
+  useEffect(() => {
+    if (tocada && pathname.startsWith(tocada)) setTocada(null);
+  }, [pathname, tocada]);
   const { signOut } = useAuth();
   const { theme, setTheme } = useTheme();
   const [apiOk, setApiOk] = useState<boolean | null>(null);
@@ -59,23 +80,41 @@ export function TopNavbar() {
 
         <nav className="hidden justify-self-center rounded-md bg-muted p-0.5 lg:flex">
           {navItems.map((item) => {
-            const active = pathname.startsWith(item.href);
+            // El destino tocado manda sobre la ruta real mientras navega.
+            const active = tocada
+              ? tocada === item.href
+              : pathname.startsWith(item.href);
             const Icon = item.icon;
             const pendientes = item.href === '/whatsapp' ? esperando : 0;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch
                 aria-current={active ? 'page' : undefined}
+                // Al pasar el raton se pide la ruta por adelantado: cuando el
+                // dedo llega, el codigo ya esta.
+                onMouseEnter={() => router.prefetch(item.href)}
+                // pointerdown, no click: el toque se acusa al bajar el dedo.
+                onPointerDown={() => setTocada(item.href)}
                 className={cn(
                   'relative flex h-7 items-center gap-1.5 rounded-sm px-2.5 text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-surface text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                  active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                <Icon className={cn(active ? 'text-primary' : 'opacity-70')} />
-                {item.label}
+                {/* La pastilla es un elemento COMPARTIDO entre pestañas: con el
+                    mismo `layoutId`, framer-motion la desliza de una a otra en
+                    vez de apagarla aqui y encenderla alla. El movimiento es lo
+                    que dice "vas para alla" sin necesidad de leer. */}
+                {active ? (
+                  <motion.span
+                    layoutId={quieto ? undefined : 'pestana-activa'}
+                    className="absolute inset-0 rounded-sm bg-surface shadow-sm"
+                    transition={{ type: 'spring', bounce: 0, duration: 0.32 }}
+                  />
+                ) : null}
+                <Icon className={cn('relative', active ? 'text-primary' : 'opacity-70')} />
+                <span className="relative">{item.label}</span>
                 {pendientes > 0 && <Badge n={pendientes} />}
               </Link>
             );

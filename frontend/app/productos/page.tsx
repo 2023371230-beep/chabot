@@ -22,7 +22,7 @@ import { ProductForm, type ProductFormValues } from '@/features/productos/produc
 import { ProductsTable } from '@/features/productos/products-table';
 
 export default function ProductosPage() {
-  const { data, loading, error, refetch } = useApi(() => endpoints.productos.list(), []);
+  const { data, loading, error, refetch } = useApi(() => endpoints.productos.list(), [], 'productos');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Producto | null>(null);
   const [submitting, setSubmitting] = useState(false);

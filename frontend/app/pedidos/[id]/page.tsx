@@ -11,7 +11,7 @@ import { OrderStatusActions } from '@/features/pedidos/order-status-actions';
 
 export default function PedidoDetailPage() {
   const params = useParams<{ id: string }>();
-  const order = useApi(() => endpoints.pedidos.get(params.id), [params.id]);
+  const order = useApi(() => endpoints.pedidos.get(params.id), [params.id], `pedido:${params.id}`);
 
   if (order.loading) return <LoadingSkeleton />;
   if (order.error || !order.data)

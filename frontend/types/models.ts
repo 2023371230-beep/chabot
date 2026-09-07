@@ -105,3 +105,29 @@ export type ChatPausado = {
   pausadoEn: string;
   ultimoMensaje: string | null;
 };
+
+/**
+ * Un mensaje del hilo de WhatsApp, listo para pintarse.
+ *
+ * `tipo` decide el lado: `cliente` a la izquierda, `bot` a la derecha y
+ * `sistema` al centro — esos ultimos son los eventos que explican por que la
+ * conversacion se corta de golpe, como cuando el bot se detiene por una queja.
+ */
+export type MensajeChat = {
+  id: string;
+  tipo: 'cliente' | 'bot' | 'sistema';
+  texto: string;
+  en: string;
+  error: string | null;
+};
+
+/** Una conversacion en la bandeja, sin el hilo completo. */
+export type ConversacionResumen = {
+  telefono: string;
+  nombreCliente: string | null;
+  clienteId: string | null;
+  ultimoMensaje: string;
+  ultimoEn: string;
+  totalMensajes: number;
+  pausada: boolean;
+};

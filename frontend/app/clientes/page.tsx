@@ -21,7 +21,7 @@ import { ClientForm, type ClientFormValues } from '@/features/clientes/client-fo
 import { ClientsTable } from '@/features/clientes/clients-table';
 
 export default function ClientesPage() {
-  const { data, loading, error, refetch } = useApi(() => endpoints.clientes.list(), []);
+  const { data, loading, error, refetch } = useApi(() => endpoints.clientes.list(), [], 'clientes');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Cliente | null>(null);
   const [submitting, setSubmitting] = useState(false);

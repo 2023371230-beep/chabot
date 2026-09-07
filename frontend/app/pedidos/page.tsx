@@ -31,9 +31,9 @@ import { OrdersTable } from '@/features/pedidos/orders-table';
 import type { PedidoEstado } from '@/types/models';
 
 export default function PedidosPage() {
-  const orders = useApi(() => endpoints.pedidos.list(), []);
-  const products = useApi(() => endpoints.productos.list(), []);
-  const clients = useApi(() => endpoints.clientes.list(), []);
+  const orders = useApi(() => endpoints.pedidos.list(), [], 'pedidos');
+  const products = useApi(() => endpoints.productos.list(), [], 'productos');
+  const clients = useApi(() => endpoints.clientes.list(), [], 'clientes');
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [warnings, setWarnings] = useState<string[]>([]);

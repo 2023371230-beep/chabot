@@ -3,21 +3,29 @@
 import { IconWhatsapp } from '@/components/icons';
 import { PageShell } from '@/components/layout/page-shell';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BandejaConversaciones } from '@/features/whatsapp/bandeja-conversaciones';
 import { HandoffPanel } from '@/features/whatsapp/handoff-panel';
-import { WhatsappMessagesPlaceholder } from '@/features/whatsapp/whatsapp-messages-placeholder';
 import { WhatsappTestForm } from '@/features/whatsapp/whatsapp-test-form';
 
+/**
+ * La pantalla de WhatsApp.
+ *
+ * El orden es el del trabajo, no el del sistema: primero lo que tiene a un
+ * cliente esperando, luego lo que ya paso, y al final la herramienta de
+ * pruebas — que es de desarrollo y no debe competir por atencion con un chat
+ * detenido.
+ */
 export default function WhatsappPage() {
   return (
     <PageShell
       fill
       title="WhatsApp"
-      description="El asistente toma pedidos solo. Aqui se ve lo que decidio no contestar."
+      description="El asistente toma pedidos solo. Aqui se ve todo lo que ha hablado."
     >
       <div className="grid gap-6">
-        {/* Los chats detenidos van primero: es lo unico de esta pantalla que
-            tiene a un cliente esperando del otro lado. */}
         <HandoffPanel />
+
+        <BandejaConversaciones />
 
         <Card>
           <CardHeader>
@@ -30,8 +38,6 @@ export default function WhatsappPage() {
             <WhatsappTestForm />
           </CardContent>
         </Card>
-
-        <WhatsappMessagesPlaceholder />
       </div>
     </PageShell>
   );

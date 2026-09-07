@@ -32,8 +32,8 @@ import { InventoryMovementsTable } from '@/features/inventario/inventory-movemen
  *   Inventario -> el historial de como llegue a ese numero
  */
 export default function InventarioPage() {
-  const movimientos = useApi(() => endpoints.inventario.movimientos(), []);
-  const productos = useApi(() => endpoints.productos.list(), []);
+  const movimientos = useApi(() => endpoints.inventario.movimientos(), [], 'inventario-movimientos');
+  const productos = useApi(() => endpoints.productos.list(), [], 'productos');
   const [submitting, setSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
   const error = movimientos.error ?? productos.error;

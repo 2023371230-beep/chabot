@@ -143,7 +143,41 @@ export const whatsappService = {
     }
 
     await this.responder(mensaje.telefono, respuesta, guardado.id);
+
+    // El enlace se marca DESPUES de responder para que la confirmacion del bot
+    // entre en la conversacion del pedido: es la ultima linea del hilo y la que
+    // cierra el trato.
+    if (pedidoId) await this.enlazarConversacion(pedidoId, mensaje.telefono);
+
     return { ...base, procesado: true, respuesta, pedidoId };
+  },
+
+  /**
+   * Marca que estos mensajes fueron los que llevaron a este pedido.
+   *
+   * La regla no necesita ventanas de tiempo: se reclaman los mensajes de ese
+   * telefono que aun no tengan dueño. Los pedidos anteriores ya reclamaron los
+   * suyos, asi que lo que queda suelto es por definicion lo que llevo a este.
+   * Un cliente que vuelve la semana siguiente estrena conversacion sin que su
+   * pedido viejo pierda la que ya tenia.
+   *
+   * Va por una funcion de la base y no con un select+update desde aqui porque
+   * dos mensajes del mismo cliente pueden procesarse a la vez en dos
+   * instancias: un update atomico no deja la ventana en la que los dos
+   * reclamarian los mismos mensajes.
+   */
+  async enlazarConversacion(pedidoId: string, telefono: string): Promise<void> {
+    const { error } = await supabase.rpc('asignar_conversacion_a_pedido', {
+      p_pedido_id: pedidoId,
+      p_telefono: telefono
+    });
+
+    // No se lanza: el pedido ya esta creado y el cliente ya recibio su
+    // confirmacion. Quedarse sin el hilo es una perdida de contexto, no un
+    // fallo de negocio.
+    if (error) {
+      console.error('[whatsapp] no se pudo enlazar la conversacion:', error.message);
+    }
   },
 
   /**

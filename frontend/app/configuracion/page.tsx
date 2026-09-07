@@ -11,7 +11,7 @@ import { useApi } from '@/hooks/use-api';
 import { ConfigurationForm, type ConfigurationFormValues } from '@/features/configuracion/configuration-form';
 
 export default function ConfiguracionPage() {
-  const config = useApi(() => endpoints.configuracion.get(), []);
+  const config = useApi(() => endpoints.configuracion.get(), [], 'configuracion');
   const [submitting, setSubmitting] = useState(false);
 
   if (config.loading) return <LoadingSkeleton />;

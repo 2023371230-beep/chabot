@@ -73,13 +73,40 @@ const main = async (): Promise<void> => {
       revisar(`GET /api/${r} con token`, res.status === 200, `HTTP ${res.status}`);
     }
 
-    // El mismo token pero manipulado en su ultimo caracter: la firma deja de
-    // cuadrar y debe rechazarse.
-    const alterado = token.slice(0, -1) + (token.endsWith('a') ? 'b' : 'a');
+    // El mismo token con la firma manipulada.
+    //
+    // Se toca un caracter del MEDIO de la firma, no el ultimo. La firma ES256
+    // son 512 bits metidos en 86 caracteres base64url, que caben 516: los 4
+    // bits sobrantes viven en el ULTIMO caracter y son relleno. Cambiar ahi
+    // una 'a' por una 'b' solo mueve relleno, la firma decodifica a los mismos
+    // 64 bytes y el token sigue siendo valido — la prueba fallaba de vez en
+    // cuando por eso, no porque el sistema dejara pasar nada.
+    const [cab, carga, firma] = token.split('.');
+    const medio = Math.floor(firma.length / 2);
+    const alterado = `${cab}.${carga}.${firma.slice(0, medio)}${
+      firma[medio] === 'A' ? 'B' : 'A'
+    }${firma.slice(medio + 1)}`;
     const resAlt = await fetch(`${BASE}/api/pedidos`, {
       headers: { Authorization: `Bearer ${alterado}` }
     });
     revisar('un token con la firma alterada da 401', resAlt.status === 401, `HTTP ${resAlt.status}`);
+
+    // Y el ataque que de verdad se intenta: cambiar el contenido del token
+    // (darse un rol distinto) conservando la firma original.
+    const cargaFalsa = Buffer.from(
+      JSON.stringify({
+        ...JSON.parse(Buffer.from(carga, 'base64url').toString()),
+        role: 'service_role'
+      })
+    ).toString('base64url');
+    const resCarga = await fetch(`${BASE}/api/pedidos`, {
+      headers: { Authorization: `Bearer ${cab}.${cargaFalsa}.${firma}` }
+    });
+    revisar(
+      'un token con el contenido manipulado da 401',
+      resCarga.status === 401,
+      `HTTP ${resCarga.status}`
+    );
 
     // Cabeceras de seguridad
     const raiz = await fetch(`${BASE}/login`);

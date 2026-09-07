@@ -1,6 +1,8 @@
 import { api } from './api-client';
 import type {
   ChatPausado,
+  ConversacionResumen,
+  MensajeChat,
   Cliente,
   ConfiguracionEmpresa,
   InventarioMovimiento,
@@ -33,6 +35,8 @@ export const endpoints = {
       ),
     update: (id: string, body: unknown) =>
       api.patch<{ pedido: Pedido; warnings: string[] }>(`/pedidos/${id}`, body),
+    // El hilo de WhatsApp que produjo el pedido. Vacio = lo capturo una persona.
+    conversacion: (id: string) => api.get<MensajeChat[]>(`/pedidos/${id}/conversacion`),
     updateStatus: (id: string, estado: string) =>
       api.patch<{ pedido: Pedido; warnings: string[] }>(`/pedidos/${id}/estado`, {
         estado
@@ -54,6 +58,11 @@ export const endpoints = {
     // Chats donde el asistente se detuvo y esperan a una persona.
     handoffs: () =>
       api.get<{ total: number; chats: ChatPausado[] }>('/whatsapp/handoffs'),
+    // Una linea por telefono para la bandeja.
+    conversaciones: () => api.get<ConversacionResumen[]>('/whatsapp/conversaciones'),
+    // El hilo completo de un telefono.
+    conversacion: (telefono: string) =>
+      api.get<MensajeChat[]>(`/whatsapp/conversaciones/${encodeURIComponent(telefono)}`),
     reanudar: (telefono: string) =>
       api.post<{ telefono: string; reanudado: boolean }>(
         `/whatsapp/handoffs/${encodeURIComponent(telefono)}/reanudar`,

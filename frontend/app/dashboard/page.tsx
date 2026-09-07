@@ -25,9 +25,9 @@ import { OrdersTable } from '@/features/pedidos/orders-table';
  * queda llena sin importar cuantos pedidos haya.
  */
 export default function DashboardPage() {
-  const orders = useApi(() => endpoints.pedidos.list(), []);
-  const products = useApi(() => endpoints.productos.list(), []);
-  const inventory = useApi(() => endpoints.inventario.resumen(), []);
+  const orders = useApi(() => endpoints.pedidos.list(), [], 'pedidos');
+  const products = useApi(() => endpoints.productos.list(), [], 'productos');
+  const inventory = useApi(() => endpoints.inventario.resumen(), [], 'inventario-resumen');
 
   const loading = orders.loading || products.loading || inventory.loading;
   const error = orders.error ?? products.error ?? inventory.error;
