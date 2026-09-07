@@ -64,6 +64,10 @@ const limpiar = async (): Promise<void> => {
   }
   await supabase.from('conversaciones_whatsapp').delete().eq('telefono', TEL);
   await supabase.from('mensajes_whatsapp').delete().eq('telefono', TEL);
+  // La cuota de IA se cuenta por telefono y por hora. Sin borrarla, dos
+  // corridas seguidas de esta prueba agotan el presupuesto del numero y el
+  // bot escala por 'sin_cuota' en medio de un caso que probaba otra cosa.
+  await supabase.from('ia_peticiones').delete().eq('telefono', TEL);
 };
 
 const main = async (): Promise<void> => {
@@ -77,21 +81,27 @@ const main = async (): Promise<void> => {
   // `atender` la prueba daria cero mensajes enlazados y la culpa seria de la
   // prueba, no del sistema.
   await escribir('hola buenas');
-  const primero = await escribir('20 kilos de pechuga');
-  revisar('el primer pedido se crea', Boolean(primero.pedidoId), (primero.respuesta ?? '').slice(0, 50));
+
+  // Dos mensajes por pedido: el dictado y el "si". Desde la doble
+  // confirmacion el pedido nace en el segundo, y es ese el que trae el id.
+  const dictado = await escribir('20 kilos de pechuga');
+  revisar('el dictado todavia no crea el pedido', !dictado.pedidoId);
+  const primero = await escribir('si porfa');
+  revisar('el primer pedido se crea al confirmar', Boolean(primero.pedidoId), (primero.respuesta ?? '').slice(0, 50));
 
   const hilo1 = primero.pedidoId ? await conversacionDePedido(primero.pedidoId) : [];
-  revisar('se le enlazan sus mensajes', hilo1.length >= 3, `${hilo1.length} mensajes`);
+  revisar('se le enlazan sus mensajes', hilo1.length >= 5, `${hilo1.length} mensajes`);
   revisar(
     'incluye lo que escribio el cliente',
     hilo1.some((m) => m.tipo === 'cliente' && m.texto.includes('20 kilos')),
   );
   revisar(
     'y la confirmacion del bot',
-    hilo1.some((m) => m.tipo === 'bot' && m.texto.includes('Le anote'))
+    hilo1.some((m) => m.tipo === 'bot' && m.texto.includes('ya se lo anote'))
   );
 
-  const segundo = await escribir('ahora 10 kilos de pierna');
+  await escribir('ahora 10 kilos de pierna');
+  const segundo = await escribir('si porfa');
   revisar('el segundo pedido se crea', Boolean(segundo.pedidoId));
 
   const hilo2 = segundo.pedidoId ? await conversacionDePedido(segundo.pedidoId) : [];
@@ -145,7 +155,9 @@ const main = async (): Promise<void> => {
   revisar('una pausa vencida NO calla al bot', !m.pausada);
 
   const traCaducar = await escribir('me das 5 kilos de ala?');
-  revisar('y vuelve a tomar pedidos', Boolean(traCaducar.pedidoId));
+  revisar('y vuelve a cotizar', /Total:/.test(traCaducar.respuesta ?? ''), traCaducar.respuesta);
+  const traConfirmar = await escribir('si porfa');
+  revisar('y vuelve a tomar pedidos', Boolean(traConfirmar.pedidoId));
 
   // ── 4. Escalar calla Y deja en la bandeja ────────────────────────────
   seccion('4. Un reclamo hace las dos cosas');

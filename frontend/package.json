@@ -14,7 +14,8 @@
     "probar:handoff": "tsx scripts/probar-handoff.ts",
     "limpiar:pruebas": "tsx scripts/limpiar-pruebas.ts",
     "probar:seguridad": "tsx scripts/probar-seguridad.ts",
-    "probar:conversaciones": "tsx scripts/probar-conversaciones.ts"
+    "probar:conversaciones": "tsx scripts/probar-conversaciones.ts",
+    "probar:doble-confirmacion": "tsx scripts/probar-doble-confirmacion.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

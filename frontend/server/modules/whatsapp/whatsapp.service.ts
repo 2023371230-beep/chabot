@@ -6,7 +6,12 @@ import { productosService } from '../productos/productos.service';
 import { formatCurrency, formatKg } from '../../shared/utils/format.utils';
 import { aMinutos } from '../../shared/utils/text.utils';
 import { buscarProducto, interpretarFecha } from './whatsapp.matcher';
-import { clasificar, saludoPorHora, MAX_CARACTERES_IA } from './whatsapp.intents';
+import {
+  clasificar,
+  saludoPorHora,
+  MAX_CARACTERES_IA,
+  type IntencionRapida
+} from './whatsapp.intents';
 import { configuracionService } from '../configuracion/configuracion.service';
 import { enviarMensaje, marcarComoLeido } from './whatsapp.client';
 import { puedeUsarIA, registrarUso } from './whatsapp.presupuesto';
@@ -44,6 +49,26 @@ const MAX_KG_RAZONABLE = 500;
  */
 const FACTOR_STOCK_INSUFICIENTE = 2;
 const MARGEN_KG_TOLERADO = 20;
+
+/**
+ * Cambios de opinion sobre el mismo borrador antes de llamar a una persona.
+ *
+ * Afinar un pedido es normal: "mejor 30", "agregale alitas". Lo que no es
+ * normal es el cuarto cambio sin cerrar — ahi el cliente no esta afinando,
+ * esta dudando, y lo que necesita es alguien que le ayude a decidir. Dejarlo
+ * dando vueltas con el bot solo alarga la duda.
+ */
+const MAX_CAMBIOS_BORRADOR = 3;
+
+/**
+ * El cierre de todo borrador, y la doble confirmacion en una linea.
+ *
+ * Dice dos cosas que tienen que quedar explicitas: que el pedido TODAVIA no
+ * existe, y exactamente que hacer para que exista. Sin la primera el cliente
+ * se va creyendo que ya esta apartado; sin la segunda contesta cualquier cosa
+ * y el "si" no se reconoce.
+ */
+const PIDE_CONFIRMACION = 'Todavia no lo anoto. Me lo confirma con un "si" y se lo aparto.';
 
 type ResultadoMensaje = {
   wamid: string;
@@ -273,13 +298,31 @@ export const whatsappService = {
       return { respuesta: '' };
     }
 
+    const intencion = clasificar(texto);
+
     // 1. El cliente reenvio el mismo texto porque no vio la palomita. Se le
     //    repite lo que ya se le contesto en vez de procesarlo otra vez.
-    const yaContestado = memoria.respuestaRepetida(texto);
-    if (yaContestado) return { respuesta: yaContestado };
+    //
+    //    Pero la cache NO aplica a las respuestas cortas. "si", "no" y los
+    //    numeros sueltos no dicen nada por si solos: contestan a la ultima
+    //    pregunta, y la misma palabra significa cosas distintas en dos
+    //    momentos distintos. Con la doble confirmacion todo pedido termina en
+    //    un "si", asi que sin esta excepcion el segundo pedido de la tarde
+    //    recibia el acuse del primero y no se creaba nunca.
+    const esRespuesta =
+      intencion.tipo === 'confirmacion' ||
+      intencion.tipo === 'rechazo' ||
+      intencion.tipo === 'solo_numero';
 
-    const resultado = await this.decidir(texto, telefono, memoria, nombrePerfil);
-    if (resultado.respuesta) memoria.recordarRespuesta(texto, resultado.respuesta);
+    if (!esRespuesta) {
+      const yaContestado = memoria.respuestaRepetida(texto);
+      if (yaContestado) return { respuesta: yaContestado };
+    }
+
+    const resultado = await this.decidir(intencion, texto, telefono, memoria, nombrePerfil);
+    if (resultado.respuesta && !esRespuesta) {
+      memoria.recordarRespuesta(texto, resultado.respuesta);
+    }
 
     // Una sola escritura, y solo si algo cambio: un "buenos dias" no toca la base.
     await memoria.guardar();
@@ -313,12 +356,12 @@ export const whatsappService = {
   },
 
   async decidir(
+    intencion: IntencionRapida,
     texto: string,
     telefono: string,
     memoria: Memoria,
     nombrePerfil?: string
   ): Promise<Atencion> {
-    const intencion = clasificar(texto);
     const saludo = saludoPorHora();
 
     switch (intencion.tipo) {
@@ -345,20 +388,20 @@ export const whatsappService = {
         return this.atenderCancelacion(telefono, memoria, nombrePerfil, texto);
 
       case 'modificacion':
-        return this.atenderModificacion(telefono, memoria, nombrePerfil, texto);
+        return this.atenderModificacion(texto, telefono, memoria, saludo, nombrePerfil);
 
       case 'estado_pedido':
         return { respuesta: await this.atenderEstado(telefono) };
 
       case 'confirmacion':
-        return this.atenderConfirmacion(telefono, memoria, nombrePerfil);
+        return this.atenderConfirmacion(telefono, memoria, nombrePerfil, texto);
 
       case 'rechazo':
         memoria.olvidarCotizacion();
         return { respuesta: 'Sin problema. Aqui andamos por si se anima mas tarde.' };
 
       case 'repetir':
-        return { respuesta: await this.atenderRepetir(telefono, memoria, saludo) };
+        return this.atenderRepetir(telefono, memoria, saludo);
 
       case 'solo_numero':
         return this.atenderSoloNumero(telefono, memoria, intencion.valor, nombrePerfil);
@@ -467,17 +510,31 @@ export const whatsappService = {
   /**
    * "Mejor que sean 30 y no 20".
    *
-   * Cambiar un pedido existente por WhatsApp es donde mas facil se duplica el
-   * pollo: si esto llegara a la IA, extraeria "30 kilos" y crearia un SEGUNDO
-   * pedido encima del de 20. Se le muestra al cliente lo que tiene y se pasa a
-   * una persona.
+   * Hay dos casos que parecen el mismo y no lo son:
+   *
+   * · Sobre un BORRADOR sin confirmar no se ha creado nada, no se movio
+   *   inventario y no se le prometio nada a nadie. Cambiarlo es gratis: se
+   *   vuelve a cotizar y el borrador nuevo pisa al viejo. Escalar esto seria
+   *   llamar a una persona porque el cliente se corrigio a si mismo.
+   *
+   * · Sobre un PEDIDO ya creado es donde mas facil se duplica el pollo: si
+   *   llegara a la IA, extraeria "30 kilos" y crearia un SEGUNDO pedido encima
+   *   del de 20. Se le muestra al cliente lo que tiene y lo toma una persona.
    */
   async atenderModificacion(
+    texto: string,
     telefono: string,
     memoria: Memoria,
-    nombrePerfil?: string,
-    texto?: string
+    saludo: string,
+    nombrePerfil?: string
   ): Promise<Atencion> {
+    const borrador = memoria.verBorrador();
+    if (borrador) {
+      const corregido = await this.corregirBorrador(texto, telefono, memoria, borrador, nombrePerfil);
+      if (corregido) return corregido;
+      return this.atenderConIA(texto, telefono, memoria, nombrePerfil, saludo, false);
+    }
+
     const [ultimo] = await this.pedidosDelCliente(telefono, 1);
 
     if (!ultimo) {
@@ -519,6 +576,79 @@ export const whatsappService = {
     };
   },
 
+  /**
+   * "Mejor que sean 20": corregir la cantidad sin gastar una peticion de IA.
+   *
+   * Es la correccion mas comun y la que peor se le da al modelo, porque el
+   * mensaje NO dice de que corte habla. La IA devolvia un producto vacio y el
+   * cliente recibia un "no manejamos ." despues de haberse explicado bien.
+   *
+   * El dato que falta ya lo tenemos: es el corte que se estaba cotizando. Por
+   * eso se resuelve aqui, con una regla, y solo cuando no queda ninguna duda —
+   * un unico numero, ningun corte nombrado y un borrador de un solo renglon.
+   * En cuanto hay ambiguedad se devuelve `null` y decide la IA.
+   */
+  async corregirBorrador(
+    texto: string,
+    telefono: string,
+    memoria: Memoria,
+    borrador: { renglones: Renglon[]; fechaEntrega?: string; notas?: string },
+    nombrePerfil?: string
+  ): Promise<Atencion | null> {
+    const numeros = texto.match(/\d+(?:[.,]\d+)?/g) ?? [];
+    if (numeros.length !== 1) return null;
+
+    const kg = Number(numeros[0].replace(',', '.'));
+    if (kg <= 0 || kg > MAX_KG_RAZONABLE) return null;
+
+    const catalogo = await productosService.findAll();
+
+    // Si nombra un corte, el cliente esta cambiando de producto y no solo de
+    // cantidad: eso si necesita a la IA para leerlo bien.
+    if (buscarProducto(texto, catalogo).encontrado) return null;
+
+    // Con varios renglones no se sabe a cual va el numero. Preguntarlo cuesta
+    // un mensaje; adivinarlo puede costar la mitad de un pedido.
+    if (borrador.renglones.length !== 1) {
+      const porId = new Map(catalogo.map((p) => [p.id, p]));
+      const nombres = borrador.renglones
+        .map((r) => porId.get(r.producto_id)?.nombre)
+        .filter(Boolean);
+      return {
+        respuesta: `Los ${formatKg(kg)} son de ${nombres.join(' o de ')}? Digame de cual y se lo ajusto.`
+      };
+    }
+
+    const renglones: Renglon[] = [{ producto_id: borrador.renglones[0].producto_id, kg }];
+
+    const faltante = this.revisarStock(renglones, catalogo);
+    if (faltante.detalle.length) {
+      const handoff = await this.pasarAPersona({
+        telefono,
+        memoria,
+        motivo: 'sin_stock',
+        detalle: faltante.detalle.join('; '),
+        nombrePerfil,
+        texto
+      });
+      return {
+        respuesta: [`${faltante.paraElCliente.join('\n')}.`, '', handoff.respuesta].join('\n')
+      };
+    }
+
+    return this.proponerBorrador({
+      telefono,
+      memoria,
+      renglones,
+      catalogo,
+      encabezado: 'Se lo cambio. Queda asi:',
+      fechaEntrega: borrador.fechaEntrega,
+      notas: borrador.notas,
+      nombrePerfil,
+      texto
+    });
+  },
+
   /** "Ya esta listo mi pedido?" se contesta de la base, no con IA. */
   async atenderEstado(telefono: string): Promise<string> {
     const [ultimo] = await this.pedidosDelCliente(telefono, 1);
@@ -544,40 +674,95 @@ export const whatsappService = {
   },
 
   /**
-   * "Si, apartamelo" despues de una cotizacion.
+   * "Si, apartamelo": el segundo paso de la doble confirmacion.
    *
-   * Se crea el pedido con los renglones que YA se habian resuelto al cotizar:
-   * ni una peticion de IA mas, y cero riesgo de que el modelo entienda otra
-   * cosa la segunda vez.
+   * Aqui, y solo aqui, nace el pedido. Se crea con los renglones que YA se
+   * habian resuelto al cotizar: ni una peticion de IA mas, y cero riesgo de
+   * que el modelo entienda otra cosa la segunda vez.
+   *
+   * Entre la cotizacion y el "si" pudo pasar media hora, y el mundo se mueve
+   * en ese rato: el stock baja y los precios cambian. Por eso el borrador se
+   * revisa contra los numeros de AHORA antes de convertirlo en pedido.
    */
   async atenderConfirmacion(
     telefono: string,
     memoria: Memoria,
-    nombrePerfil?: string
+    nombrePerfil?: string,
+    texto?: string
   ): Promise<Atencion> {
-    const cotizacion = memoria.tomarCotizacion();
+    const borrador = memoria.tomarCotizacion();
 
-    if (!cotizacion) {
+    if (!borrador) {
       // Un "va" o un "sale" sueltos son solo un acuse de recibo.
       return { respuesta: 'Perfecto. Cualquier cosa aqui ando.' };
+    }
+
+    const catalogo = await productosService.findAll();
+
+    // Un "si" que llega tarde confirma un total que ya puede no ser el de hoy.
+    // Se vuelve a cotizar con los precios de ahora y se pregunta otra vez: un
+    // mensaje de mas es mas barato que cobrar sobre un precio viejo.
+    if (borrador.vencida) {
+      memoria.recordarCotizacion(borrador.renglones, {
+        fechaEntrega: borrador.fechaEntrega,
+        notas: borrador.notas
+      });
+      return {
+        respuesta: this.armarCotizacion(
+          borrador.renglones,
+          catalogo,
+          'Paso un rato desde que le pase el precio. Se lo reviso con los de hoy:',
+          { fechaEntrega: borrador.fechaEntrega }
+        )
+      };
+    }
+
+    // El stock pudo moverse mientras el cliente lo pensaba. Confirmar a ciegas
+    // convertiria el borrador en una promesa que la bodega no puede cumplir.
+    const faltante = this.revisarStock(borrador.renglones, catalogo);
+    if (faltante.detalle.length) {
+      const handoff = await this.pasarAPersona({
+        telefono,
+        memoria,
+        motivo: 'sin_stock',
+        detalle: `Al confirmar ya no alcanzaba: ${faltante.detalle.join('; ')}`,
+        nombrePerfil,
+        texto
+      });
+      return {
+        respuesta: [
+          'Mientras lo pensaba se nos movio el inventario.',
+          `${faltante.paraElCliente.join('\n')}.`,
+          '',
+          handoff.respuesta
+        ].join('\n')
+      };
     }
 
     return this.crearPedido({
       telefono,
       memoria,
       nombrePerfil,
-      renglones: cotizacion.renglones,
-      fechaEntrega: cotizacion.fechaEntrega,
+      renglones: borrador.renglones,
+      catalogo,
+      fechaEntrega: borrador.fechaEntrega,
+      notas: borrador.notas,
       saludo: null
     });
   },
 
   /** "Lo de siempre": se lee el ultimo pedido en vez de inventarlo. */
-  async atenderRepetir(telefono: string, memoria: Memoria, saludo: string): Promise<string> {
+  async atenderRepetir(
+    telefono: string,
+    memoria: Memoria,
+    saludo: string
+  ): Promise<Atencion> {
     const [ultimo] = await this.pedidosDelCliente(telefono, 1);
 
     if (!ultimo?.pedido_detalles?.length) {
-      return `${saludo}! Todavia no tengo un pedido anterior suyo. Digame que corte necesita y cuantos kilos.`;
+      return {
+        respuesta: `${saludo}! Todavia no tengo un pedido anterior suyo. Digame que corte necesita y cuantos kilos.`
+      };
     }
 
     const renglones: Renglon[] = ultimo.pedido_detalles.map((d) => ({
@@ -585,17 +770,17 @@ export const whatsappService = {
       kg: Number(d.kg)
     }));
 
-    // Se cotiza y se pregunta. El "si" del cliente lo convierte en pedido sin
-    // gastar IA, porque los renglones ya quedaron guardados.
-    memoria.recordarCotizacion(renglones);
+    // Se cotiza con los precios de hoy, no con los que pago la vez pasada: el
+    // pedido es igual, el precio no tiene por que serlo.
+    const catalogo = await productosService.findAll();
 
-    const lineas = [`${saludo}! Su ultimo pedido fue:`, ''];
-    for (const d of ultimo.pedido_detalles) {
-      lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
-    }
-    lineas.push('');
-    lineas.push('Se lo repito igual?');
-    return lineas.join('\n');
+    return this.proponerBorrador({
+      telefono,
+      memoria,
+      renglones,
+      catalogo,
+      encabezado: `${saludo}! Su ultimo pedido fue asi:`
+    });
   },
 
   /**
@@ -626,12 +811,34 @@ export const whatsappService = {
       };
     }
 
-    return this.crearPedido({
+    const renglones: Renglon[] = [{ producto_id: pendiente.producto_id, kg: valor }];
+    const catalogo = await productosService.findAll();
+
+    const faltante = this.revisarStock(renglones, catalogo);
+    if (faltante.detalle.length) {
+      const handoff = await this.pasarAPersona({
+        telefono,
+        memoria,
+        motivo: 'sin_stock',
+        detalle: faltante.detalle.join('; '),
+        nombrePerfil,
+        texto: String(valor)
+      });
+      return {
+        respuesta: [`${faltante.paraElCliente.join('\n')}.`, '', handoff.respuesta].join('\n')
+      };
+    }
+
+    // No se crea nada todavia: el numero suelto contesta a "cuantos kilos?",
+    // no confirma un pedido. Se le enseña el total y se le pide el "si".
+    return this.proponerBorrador({
       telefono,
       memoria,
+      renglones,
+      catalogo,
+      encabezado: 'Le sale asi:',
       nombrePerfil,
-      renglones: [{ producto_id: pendiente.producto_id, kg: valor }],
-      saludo: null
+      texto: String(valor)
     });
   },
 
@@ -687,10 +894,6 @@ export const whatsappService = {
     if (!extraido.productos.length) {
       return this.noEntendi(telefono, memoria, texto, nombrePerfil, saludo);
     }
-
-    // "Cuanto cuesta 20 kilos de pechuga" es una COTIZACION, no un pedido.
-    // Crear el pedido aqui seria presumir que ya compro.
-    const soloCotiza = extraido.intent === 'consulta';
 
     // Traducir nombres a productos reales del catalogo, sin IA.
     const catalogo = await productosService.findAll();
@@ -766,24 +969,23 @@ export const whatsappService = {
 
     const fechaEntrega = interpretarFecha(extraido.fecha_entrega) ?? undefined;
 
-    if (soloCotiza) {
-      return {
-        respuesta: this.armarCotizacion(memoria, renglones, catalogo, saludo, fechaEntrega)
-      };
-    }
-
-    return this.crearPedido({
+    // Aqui NO se crea el pedido, ni cuando el cliente dice "mandame 20 de
+    // pechuga". Lo que sale de la IA es una lectura de un mensaje escrito a
+    // prisa, y entre esa lectura y despachar pollo tiene que haber un cliente
+    // viendo el total y diciendo que si. El pedido nace en `atenderConfirmacion`.
+    return this.proponerBorrador({
       telefono,
       memoria,
-      nombrePerfil,
       renglones,
       // El catalogo ya esta leido para resolver nombres y revisar stock: se
-      // pasa para que crear el pedido no vuelva a pedir la misma tabla.
+      // reusa para poner los precios, sin volver a pedir la misma tabla.
       catalogo,
+      encabezado: traeSaludo ? `${saludo}! Le sale asi:` : 'Le sale asi:',
       fechaEntrega,
       notas: extraido.notas ?? undefined,
       noEncontrados,
-      saludo: traeSaludo ? saludo : null
+      nombrePerfil,
+      texto
     });
   },
 
@@ -860,9 +1062,10 @@ export const whatsappService = {
   /**
    * Crea el pedido, con la ultima red contra los duplicados.
    *
-   * El cliente que no ve respuesta reescribe su pedido con otras palabras. La
-   * cache de texto identico no lo agarra porque el texto cambio, pero los
-   * renglones resueltos son los mismos: esa huella es la que se compara.
+   * Es el unico punto del modulo donde nace un pedido, y solo se llega aqui
+   * desde un "si" del cliente. La red de duplicados sigue haciendo falta: dos
+   * "si" muy seguidos llegan como dos mensajes distintos, y el segundo ya no
+   * encuentra el borrador pero si podria encontrar el camino hasta aqui.
    */
   async crearPedido(params: {
     telefono: string;
@@ -872,7 +1075,6 @@ export const whatsappService = {
     catalogo?: Awaited<ReturnType<typeof productosService.findAll>>;
     fechaEntrega?: string;
     notas?: string;
-    noEncontrados?: string[];
     saludo: string | null;
   }): Promise<Atencion> {
     const { telefono, memoria, nombrePerfil, renglones, fechaEntrega, notas, saludo } = params;
@@ -895,7 +1097,7 @@ export const whatsappService = {
         catalogo: params.catalogo
       });
 
-      let resumen = componerResumen(pedido, warnings, params.noEncontrados ?? [], saludo);
+      let resumen = componerResumen(pedido, warnings, saludo);
 
       // El pedido se toma igual fuera de horario; solo se avisa. Rechazarlo
       // por la hora seria regalar la venta a quien escribe de noche.
@@ -914,22 +1116,75 @@ export const whatsappService = {
   },
 
   /**
-   * Cotiza y se acuerda de lo que cotizo.
+   * Propone un borrador: lo guarda, vigila la indecision y lo escribe.
    *
-   * Guardar los renglones es lo que permite que un "si porfa" se convierta en
-   * pedido sin volver a molestar a la IA.
+   * Todos los caminos que cotizan pasan por aqui — la IA, el numero suelto,
+   * "lo de siempre" y las correcciones. Tener un solo sitio es lo que
+   * garantiza que ninguno se salte el conteo de cambios ni el "todavia no lo
+   * anoto" del final: un camino que se lo saltara volveria a ser un pedido
+   * creado sin que el cliente lo confirme.
+   */
+  async proponerBorrador(params: {
+    telefono: string;
+    memoria: Memoria;
+    renglones: Renglon[];
+    catalogo: Awaited<ReturnType<typeof productosService.findAll>>;
+    encabezado: string;
+    fechaEntrega?: string;
+    notas?: string;
+    noEncontrados?: string[];
+    nombrePerfil?: string;
+    texto?: string;
+  }): Promise<Atencion> {
+    const { telefono, memoria, renglones, catalogo } = params;
+
+    const cambios = memoria.recordarCotizacion(renglones, {
+      fechaEntrega: params.fechaEntrega,
+      notas: params.notas
+    });
+
+    // Cambiar de opinion una y otra vez sin cerrar no lo resuelve otra
+    // cotizacion mas: lo resuelve alguien que le ayude a decidir.
+    if (cambios >= MAX_CAMBIOS_BORRADOR) {
+      memoria.olvidarCotizacion();
+      const handoff = await this.pasarAPersona({
+        telefono,
+        memoria,
+        motivo: 'modificacion',
+        detalle: `${cambios} cambios al pedido sin llegar a confirmarlo`,
+        nombrePerfil: params.nombrePerfil,
+        texto: params.texto
+      });
+      return {
+        respuesta: `Para no equivocarme con los cambios, mejor lo vemos con calma. ${handoff.respuesta}`
+      };
+    }
+
+    return {
+      respuesta: this.armarCotizacion(renglones, catalogo, params.encabezado, {
+        fechaEntrega: params.fechaEntrega,
+        noEncontrados: params.noEncontrados
+      })
+    };
+  },
+
+  /**
+   * El borrador escrito para que el cliente lo lea y diga que si.
+   *
+   * Solo formatea: guardar el borrador es cosa de quien llama, porque hay
+   * caminos que necesitan saber cuantas veces se cambio antes de decidir si
+   * vale la pena mandarlo. Que exista un unico formateador es lo que hace que
+   * el cliente vea siempre la misma forma, venga el borrador de la IA, de un
+   * "20" suelto o de un "lo de siempre".
    */
   armarCotizacion(
-    memoria: Memoria,
     renglones: Renglon[],
     catalogo: Awaited<ReturnType<typeof productosService.findAll>>,
-    saludo: string,
-    fechaEntrega?: string
+    encabezado: string,
+    extra?: { fechaEntrega?: string; noEncontrados?: string[] }
   ): string {
-    memoria.recordarCotizacion(renglones, fechaEntrega);
-
     const porId = new Map(catalogo.map((p) => [p.id, p]));
-    const lineas = [`${saludo}! Le sale asi:`, ''];
+    const lineas = [encabezado, ''];
     let total = 0;
     let kilos = 0;
 
@@ -944,8 +1199,18 @@ export const whatsappService = {
 
     lineas.push('');
     lineas.push(`Total: ${formatKg(kilos)} — ${formatCurrency(total)}`);
+
+    if (extra?.fechaEntrega) lineas.push(`Entrega: ${extra.fechaEntrega}`);
+
+    if (extra?.noEncontrados?.length) {
+      lineas.push('');
+      lineas.push(
+        `Disculpe, no manejamos ${extra.noEncontrados.join(' ni ')}, por eso no va en la cuenta.`
+      );
+    }
+
     lineas.push('');
-    lineas.push('Se lo aparto?');
+    lineas.push(PIDE_CONFIRMACION);
     return lineas.join('\n');
   },
 
@@ -1103,10 +1368,15 @@ function respuestaParaNoTexto(tipo: string): string {
 }
 
 /**
- * El mensaje de vuelta al cliente.
+ * El acuse del pedido ya creado.
  *
- * Cierra siempre diciendo que el pedido esta POR CONFIRMAR: es la unica forma
- * de que el cliente no asuma que ya esta apartado. El stock no se movio.
+ * El cliente acaba de decir que si, asi que la primera linea confirma que se
+ * anoto — no repetir esa confirmacion es lo que hace que vuelva a escribir
+ * "quedo?" cinco minutos despues.
+ *
+ * Y cierra diciendo que falta el visto bueno del negocio, porque es verdad: el
+ * pedido nace en estado pendiente y el stock todavia no se movio. Callarlo
+ * haria que el cliente cuente con mercancia que nadie ha apartado.
  */
 type PedidoResumen = {
   id: string;
@@ -1122,12 +1392,13 @@ type PedidoResumen = {
 function componerResumen(
   pedido: PedidoResumen,
   warnings: string[],
-  noEncontrados: string[],
   saludo: string | null
 ): string {
   // Si el cliente saludo, se le devuelve el saludo: cuesta cero y cambia por
   // completo como se siente el trato.
-  const lineas: string[] = saludo ? [`${saludo}! Con gusto. Le anote:`] : ['Con gusto. Le anote:'];
+  const lineas: string[] = saludo
+    ? [`${saludo}! Listo, ya se lo anote:`]
+    : ['Listo, ya se lo anote:'];
 
   for (const d of pedido.pedido_detalles ?? []) {
     lineas.push(`  ${formatKg(d.kg)} de ${d.productos?.nombre ?? 'producto'}`);
@@ -1138,11 +1409,6 @@ function componerResumen(
 
   if (pedido.fecha_entrega) {
     lineas.push(`Entrega: ${pedido.fecha_entrega}`);
-  }
-
-  if (noEncontrados.length) {
-    lineas.push('');
-    lineas.push(`Disculpe, no manejamos ${noEncontrados.join(' ni ')}, por eso no va en el pedido.`);
   }
 
   const stock = warnings.filter((w) => w.toLowerCase().includes('stock'));
@@ -1159,7 +1425,7 @@ function componerResumen(
   }
 
   lineas.push('');
-  lineas.push('Su pedido queda POR CONFIRMAR. En cuanto lo confirmemos le avisamos.');
+  lineas.push('Queda anotado. En cuanto le demos salida en el mostrador le avisamos.');
 
   return lineas.join('\n');
 }

@@ -390,12 +390,41 @@ caché del texto idéntico (3 min) y huella de los renglones ya resueltos
 
 ### El bot no puede preguntar lo que no sabe oír
 
-`"Se lo aparto?"` y `"¿Cuántos kilos?"` son preguntas, y WhatsApp no tiene
+`"¿Se lo aparto?"` y `"¿Cuántos kilos?"` son preguntas, y WhatsApp no tiene
 sesión: el `"si porfa"` o el `"20"` que contesta el cliente llegan solos, sin
 nada del mensaje anterior. Sin memoria corta el bot respondía *"no alcancé a
 identificar el pedido"* a alguien que acababa de contestar exactamente lo que
 se le preguntó. Guardar la cotización además **ahorra** la petición: el "sí" se
 convierte en pedido con los renglones que ya estaban resueltos.
+
+### Ningún pedido nace de una sola lectura de la IA
+
+Lo que devuelve el modelo es su interpretación de un mensaje escrito a prisa.
+Entre esa interpretación y despachar pollo hay un paso obligatorio: el cliente
+ve el total y dice que sí. Por eso `atenderConIA` **nunca** crea el pedido —
+sólo propone un borrador — y el único sitio donde nace un pedido es
+`atenderConfirmacion`.
+
+Tres cosas se caen si esto no se respeta:
+
+- **La caché de reenvío no puede aplicar a las respuestas cortas.** `"si"`,
+  `"no"` y los números sueltos no significan nada por sí solos: contestan a la
+  última pregunta. Como ahora *todo* pedido termina en un `"si"`, sin esa
+  excepción el segundo pedido de la tarde recibía el acuse del primero y no se
+  creaba nunca.
+- **El borrador se revisa contra los números de ahora al confirmar.** Entre la
+  cotización y el `"si"` pueden pasar treinta minutos: el stock baja y los
+  precios cambian. Un `"si"` tardío se vuelve a cotizar en vez de cerrarse.
+- **`"mejor que sean 20"` no nombra el corte.** El modelo devolvía un producto
+  vacío y el cliente leía *"no manejamos ."* después de haberse explicado bien.
+  El dato que falta ya está en el borrador, así que esa corrección se resuelve
+  con una regla y **sin gastar** petición: `corregirBorrador`.
+
+Corregir el borrador es gratis — no se creó nada, no se movió inventario —, así
+que ahí el bot recotiza en vez de escalar. Corregir un pedido **ya creado** sí
+pasa a una persona: es donde se duplica el pollo. Y al cuarto cambio sin cerrar
+el cliente no está afinando, está dudando, y eso lo resuelve alguien que le
+ayude a decidir, no otra cotización más.
 
 ### `REFRESH MATERIALIZED VIEW CONCURRENTLY` no corre dentro de una función
 

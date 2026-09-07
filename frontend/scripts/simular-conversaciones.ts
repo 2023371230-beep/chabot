@@ -56,7 +56,7 @@ const main = async (): Promise<void> => {
   revisar('el "si porfa" no llega a la IA', clasificar('si porfa').tipo === 'confirmacion');
 
   let m = await Memoria.cargar(TEL);
-  m.recordarCotizacion([{ producto_id: PECHUGA, kg: 20 }], '2026-09-11');
+  m.recordarCotizacion([{ producto_id: PECHUGA, kg: 20 }], { fechaEntrega: '2026-09-11' });
   await m.guardar();
 
   // Otra instancia: es lo que pasa en Vercel entre un mensaje y el siguiente.

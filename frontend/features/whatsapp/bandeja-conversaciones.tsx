@@ -130,6 +130,7 @@ export function BandejaConversaciones() {
               {abierta ? (
                 <Hilo
                   telefono={abierta}
+                  nombre={conversaciones.find((c) => c.telefono === abierta)?.nombreCliente ?? null}
                   ultimoDelCliente={
                     conversaciones.find((c) => c.telefono === abierta)?.ultimoDelCliente ?? null
                   }
@@ -152,10 +153,12 @@ export function BandejaConversaciones() {
 
 function Hilo({
   telefono,
+  nombre,
   ultimoDelCliente,
   onVolver
 }: {
   telefono: string;
+  nombre: string | null;
   ultimoDelCliente: string | null;
   onVolver: () => void;
 }) {
@@ -175,7 +178,16 @@ function Hilo({
         >
           &larr; Conversaciones
         </button>
-        <span className="text-sm font-medium">{telefono}</span>
+        {/* El nombre manda cuando se conoce. La lista de al lado ya lo dice, y
+            leer el numero crudo aqui obliga a comparar digitos para saber que
+            chat se tiene abierto. El telefono baja a segunda linea, que es
+            donde sirve: es el dato que se copia para llamar. */}
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-sm font-medium">{nombre ?? telefono}</span>
+          {nombre ? (
+            <span className="block font-num text-xs text-muted-foreground">{telefono}</span>
+          ) : null}
+        </span>
         <a
           href={`https://wa.me/${telefono.replace(/\D/g, '')}`}
           target="_blank"

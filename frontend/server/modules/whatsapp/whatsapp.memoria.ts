@@ -50,9 +50,25 @@ const VIDA_PREGUNTA_KG = 15 * 60_000;
 const VIDA_RESPUESTA = 3 * 60_000; // ventana del "se me fue el mensaje"
 const VIDA_PEDIDO = 10 * 60_000; // ventana del reenvio por desesperacion
 
+/**
+ * El pedido dictado que todavia NO existe.
+ *
+ * Es el centro de la doble confirmacion: entre "mandame 20 de pechuga" y el
+ * pedido en la base hay un paso obligatorio en el que el cliente ve el total y
+ * dice que si. `cambios` cuenta cuantas veces cambio de opinion sin cerrar,
+ * que es la señal de que ya no lo va a cerrar solo.
+ */
+type Borrador = {
+  renglones: Renglon[];
+  fechaEntrega?: string;
+  notas?: string;
+  cambios?: number;
+  en: number;
+};
+
 /** Lo que se guarda en `conversaciones_whatsapp.contexto`. */
 type Contexto = {
-  cotizacion?: { renglones: Renglon[]; fechaEntrega?: string; en: number };
+  cotizacion?: Borrador;
   preguntaKg?: { producto_id: string; nombre: string; en: number };
   ultimaRespuesta?: { texto: string; respuesta: string; en: number };
   ultimoPedido?: { firma: string; resumen: string; en: number };
@@ -213,28 +229,75 @@ export class Memoria {
     this.sucia = true;
   }
 
-  // ── Cotizacion pendiente ──────────────────────────────────────────────
+  // ── El borrador pendiente de confirmar ────────────────────────────────
 
-  /** Se llama al mandar un "le sale en $X. Se lo aparto?". */
-  recordarCotizacion(renglones: Renglon[], fechaEntrega?: string): void {
-    this.ctx.cotizacion = { renglones, fechaEntrega, en: Date.now() };
+  /**
+   * Guarda el borrador y devuelve cuantas veces el cliente lo ha cambiado.
+   *
+   * El contador es lo que distingue a quien esta afinando su pedido de quien
+   * ya no sabe que quiere. Reenviar EL MISMO borrador no cuenta como cambio:
+   * eso pasa cuando el cliente no vio la respuesta y reescribe lo mismo.
+   */
+  recordarCotizacion(
+    renglones: Renglon[],
+    extra?: { fechaEntrega?: string; notas?: string }
+  ): number {
+    const previo = this.ctx.cotizacion;
+    const vivo = previo && vigente(previo.en, VIDA_COTIZACION) ? previo : null;
+    const cambio = vivo !== null && firmaPedido(vivo.renglones) !== firmaPedido(renglones);
+    const cambios = vivo ? (vivo.cambios ?? 0) + (cambio ? 1 : 0) : 0;
+
+    this.ctx.cotizacion = {
+      renglones,
+      fechaEntrega: extra?.fechaEntrega,
+      notas: extra?.notas,
+      cambios,
+      en: Date.now()
+    };
     this.cambio();
+    return cambios;
   }
 
   /**
-   * Devuelve la cotizacion pendiente y la borra.
+   * El borrador vivo, sin consumirlo.
    *
-   * Se borra al leerla a proposito: un "si" solo puede convertir la cotizacion
-   * en pedido UNA vez. Si el cliente manda "si" dos veces, el segundo ya no
-   * encuentra nada y no crea un pedido duplicado.
+   * Sirve para leerlo y seguir decidiendo: un "mejor que sean 20" no dice de
+   * que corte habla, y la unica forma de saberlo sin gastar una peticion de IA
+   * es mirar lo que ya se estaba cotizando.
    */
-  tomarCotizacion(): { renglones: Renglon[]; fechaEntrega?: string } | null {
+  verBorrador(): Borrador | null {
+    const c = this.ctx.cotizacion;
+    return c && vigente(c.en, VIDA_COTIZACION) ? c : null;
+  }
+
+  /** Si hay un borrador vivo esperando el "si" del cliente. */
+  hayBorrador(): boolean {
+    return this.verBorrador() !== null;
+  }
+
+  /**
+   * Devuelve el borrador pendiente y lo borra.
+   *
+   * Se borra al leerlo a proposito: un "si" solo puede convertirlo en pedido
+   * UNA vez. Si el cliente manda "si" dos veces, el segundo ya no encuentra
+   * nada y no crea un pedido duplicado.
+   *
+   * Uno vencido se devuelve igual, marcado. Tirarlo en silencio dejaria al
+   * cliente confirmando al vacio: dijo que si a algo y no pasaria nada.
+   */
+  tomarCotizacion():
+    | { renglones: Renglon[]; fechaEntrega?: string; notas?: string; vencida: boolean }
+    | null {
     const c = this.ctx.cotizacion;
     if (!c) return null;
     delete this.ctx.cotizacion;
     this.cambio();
-    if (!vigente(c.en, VIDA_COTIZACION)) return null;
-    return { renglones: c.renglones, fechaEntrega: c.fechaEntrega };
+    return {
+      renglones: c.renglones,
+      fechaEntrega: c.fechaEntrega,
+      notas: c.notas,
+      vencida: !vigente(c.en, VIDA_COTIZACION)
+    };
   }
 
   olvidarCotizacion(): void {
