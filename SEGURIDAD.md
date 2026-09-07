@@ -151,7 +151,7 @@ mantiene abierto a sesión porque quien llama es Meta, no una persona.
 ## Cómo se comprueba
 
 ```bash
-cd frontend && npm run probar:seguridad
+npm run probar:seguridad
 ```
 
 Crea un usuario temporal, entra, golpea la API con su token, y lo borra al

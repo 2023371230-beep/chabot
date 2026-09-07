@@ -51,49 +51,62 @@ viven ahora dentro del mismo proyecto y se exponen como rutas de la API. Eso es
 lo que permite desplegar todo en Vercel con un `git push` (ver
 [DESPLIEGUE.md](DESPLIEGUE.md)).
 
+La app vive en la **raíz del repositorio**, no en una subcarpeta. Es lo que
+hace que Vercel la encuentre sin configurarle nada: con la app un nivel más
+abajo hay que acordarse del *Root Directory*, y olvidarlo produce un despliegue
+que "termina bien" y sirve un 404 sin decir por qué.
+
 ```
 Pollito/
-├── sql/
-│   ├── 001_schema_completo.sql      el esquema, listo para pegar
-│   ├── 002_estado_serverless.sql    presupuesto de IA compartido
-│   └── README.md                    justificación de cada decisión
+├── app/              Las URLs, y nada más
+│   ├── */page.tsx    las nueve pantallas
+│   └── api/          un route.ts por endpoint: valida y delega, no razona
 │
-├── frontend/         Next.js 14 App Router, puerto 3000 — TODA la app
-│   ├── server/       el antiguo backend: NO se importa desde el navegador
-│   │   ├── config/env.ts          variables de entorno centralizadas
-│   │   ├── database/              cliente de Supabase (service_role)
-│   │   ├── http/route.ts          sobre de respuesta + errores → HTTP
-│   │   ├── modules/               un módulo por dominio
-│   │   │   ├── ai/                extracción con Groq
-│   │   │   ├── clientes/
-│   │   │   ├── configuracion/
-│   │   │   ├── inventario/
-│   │   │   ├── pedidos/
-│   │   │   ├── productos/
-│   │   │   └── whatsapp/
-│   │   │       ├── whatsapp.intents.ts      reglas SIN IA (el filtro)
-│   │   │       ├── whatsapp.matcher.ts      nombre de corte → UUID, fechas
-│   │   │       ├── whatsapp.memoria.ts      memoria corta (en la base)
-│   │   │       ├── whatsapp.presupuesto.ts  racionamiento de la cuota de IA
-│   │   │       ├── whatsapp.handoff.ts      apagado controlado del bot
-│   │   │       └── whatsapp.service.ts      orquesta todo
-│   │   └── shared/                errores y utilidades
-│   ├── scripts/                   simuladores (`npm run simular`)
-│   ├── app/api/                   las rutas: un route.ts por endpoint
-│   ├── app/          una carpeta por ruta
+├── client/           TODO el front. NUNCA importa de server/
 │   ├── components/
 │   │   ├── icons/    set propio de 30 iconos SVG
 │   │   ├── layout/   AppShell, PageShell, TopNavbar
 │   │   ├── motion/   primitivas de framer-motion
 │   │   ├── shared/   DataTable, EmptyState, ConfirmDialog...
 │   │   └── ui/       Button, Card, Input, Field, Dialog...
-│   ├── features/     lógica por dominio
-│   └── lib/          api-client, formatters, constants
+│   ├── features/     una carpeta por dominio
+│   ├── hooks/        datos y estado del navegador
+│   ├── lib/          api-client, caché, formatters
+│   └── types/        las formas que pinta la interfaz
 │
-└── docs/ui/
-    ├── copy.md            ~220 textos auditados y reescritos (SIN APLICAR)
-    └── design-system.md   dirección visual anterior (histórica)
+├── server/           TODO el back. NUNCA importa de client/
+│   ├── config/env.ts    variables de entorno, validadas al arrancar
+│   ├── database/        cliente de Supabase (service_role)
+│   ├── http/route.ts    sobre de respuesta + errores → HTTP
+│   ├── modules/         un módulo por dominio
+│   │   ├── ai/          extracción con Groq
+│   │   ├── clientes/  configuracion/  inventario/  pedidos/  productos/
+│   │   └── whatsapp/
+│   │       ├── whatsapp.intents.ts      qué es el mensaje, sin gastar IA
+│   │       ├── whatsapp.router.ts       a quién le toca atenderlo
+│   │       ├── whatsapp.borrador.ts     del mensaje a una propuesta
+│   │       ├── whatsapp.pedido.ts       de la propuesta confirmada a un pedido
+│   │       ├── whatsapp.postventa.ts    cancelar, cambiar, consultar
+│   │       ├── whatsapp.informacion.ts  precios y horario desde la base
+│   │       ├── whatsapp.memoria.ts      memoria corta (en la base)
+│   │       ├── whatsapp.handoff.ts      apagado controlado del bot
+│   │       └── whatsapp.service.ts      transporte: recibir y responder
+│   └── shared/          errores y utilidades del servidor
+│
+├── shared/           Lo poquísimo que usan los dos lados. Módulos PUROS
+├── scripts/          las pruebas (`npm run simular`, ...)
+├── sql/              migraciones en orden, para pegar en Supabase
+└── docs/ui/          sistema de diseño y textos
 ```
+
+**La regla es una sola: el front no sabe nada de la base de datos, y el back no
+sabe nada del navegador.** `app/api/` es la única frontera, y sus `route.ts`
+son adaptadores de diez líneas. Hoy el `server/` importa del otro lado en
+exactamente **un** sitio — `shared/handoff.ts` — y ese módulo es puro a
+propósito.
+
+`app/` es la única carpeta con las dos cosas dentro, y no por gusto: Next exige
+que páginas y rutas de API vivan ahí.
 
 Cada módulo de `server/` es `service.ts` + `schemas.ts` (Zod) + `types.ts`.
 Los antiguos `controller.ts` y `routes.ts` de Express desaparecieron: su
@@ -184,7 +197,7 @@ Medido con los simuladores:
 Se re-corren con:
 
 ```bash
-cd frontend && npm run simular && npm run simular:conversaciones
+npm run simular && npm run simular:conversaciones
 ```
 
 ---
@@ -257,7 +270,7 @@ Sin él, Reportes solo puede mostrar **ingresos**, nunca **ganancia**. Requiere:
 
 ### ✅ Migración a Next.js API Routes (hecha)
 
-Express se retiró. Los 20 endpoints viven en `frontend/app/api/**/route.ts` y
+Express se retiró. Los 20 endpoints viven en `app/api/**/route.ts` y
 llaman a los mismos servicios, validando con los mismos esquemas de Zod. Ver
 [DESPLIEGUE.md](DESPLIEGUE.md).
 
@@ -267,7 +280,7 @@ Sin él el bot funciona pero sin presupuesto de IA, y el síntoma es silencioso.
 ### 🟢 Cosas menores
 
 - **Login desactivado.** `NEXT_PUBLIC_DISABLE_AUTH=true` en
-  `frontend/.env.local`. No existe usuario admin en Supabase Auth. Para
+  `.env.local`. No existe usuario admin en Supabase Auth. Para
   reactivarlo: crear el usuario (Authentication → Users → Add user, con
   **Auto Confirm** marcado) y quitar la variable.
 - **Datos de prueba en Supabase:** 4 clientes y 4 pedidos con nombres `PRUEBA`.
@@ -330,7 +343,7 @@ Varias veces las clases nuevas (`bg-bar`, `text-on-danger`, `rounded-md`)
 existían en el DOM pero **el CSS no se generaba**. El dev server de Next se
 queda con la config vieja. Al cambiar `tailwind.config.ts`:
 ```bash
-rm -rf frontend/.next/cache   # y reiniciar el dev server
+rm -rf .next/cache   # y reiniciar el dev server
 ```
 
 ### `@apply font-display` no funciona
@@ -473,7 +486,7 @@ PostgreSQL lo prohíbe: toda función corre dentro de una transacción. Por eso
 
 ## 7. Credenciales — dónde va cada una
 
-**Todas viven en un solo archivo: `frontend/.env.local`.** Ya no hay dos.
+**Todas viven en un solo archivo: `.env.local`.** Ya no hay dos.
 Para Vercel, las mismas se copian en Settings → Environment Variables.
 
 | Variable | De dónde se saca |
@@ -503,7 +516,7 @@ sin valores.
 ## 8. Cómo correrlo
 
 ```bash
-cd frontend && npm run dev
+npm run dev
 ```
 
 Un solo comando: la app y su API son el mismo proyecto (puerto 3000).

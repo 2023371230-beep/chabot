@@ -52,7 +52,7 @@ desde el panel de Supabase.
 
 ## Paso 3 — Encender el login
 
-En `frontend/.env.local`, cambia:
+En `.env.local`, cambia:
 
 ```diff
 - NEXT_PUBLIC_DISABLE_AUTH=true
@@ -63,7 +63,7 @@ Y reinicia el servidor (las variables `NEXT_PUBLIC_*` se hornean en el build,
 no se releen solas):
 
 ```bash
-cd frontend && npm run dev
+npm run dev
 ```
 
 Entra a `http://localhost:3000` — debe mandarte a `/login`. Usa el correo y la
@@ -80,7 +80,7 @@ desplegar.
 Hay algo que el login **todavía no protege**, y conviene saberlo:
 
 El login cubre **las pantallas**, no **la API**. Las rutas de
-`frontend/app/api/**` siguen abiertas a quien conozca la URL:
+`app/api/**` siguen abiertas a quien conozca la URL:
 
 ```bash
 # esto funciona aunque no hayas iniciado sesion

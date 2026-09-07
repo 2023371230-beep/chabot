@@ -1,8 +1,8 @@
 # Desplegar Báscula en Vercel
 
 Todo el proyecto es **una sola app de Next.js**. El backend de Express ya no
-existe: sus servicios viven en `frontend/server/` y se exponen como rutas en
-`frontend/app/api/**/route.ts`.
+existe: sus servicios viven en `server/` y se exponen como rutas en
+`app/api/**/route.ts`.
 
 ---
 
@@ -18,7 +18,7 @@ bloquear, así que el síntoma es silencioso.
 Para comprobar que quedó:
 
 ```bash
-cd frontend && npm run simular:conversaciones
+npm run simular:conversaciones
 ```
 
 Debe decir **22 pasadas, 0 fallidas**. Si dice 20 y 2, falta el SQL.
@@ -27,21 +27,20 @@ Debe decir **22 pasadas, 0 fallidas**. Si dice 20 y 2, falta el SQL.
 
 ## 2. Importar el repo en Vercel
 
-En [vercel.com/new](https://vercel.com/new), importa el repositorio y cambia
-**una sola cosa**:
+En [vercel.com/new](https://vercel.com/new), importa el repositorio y **no
+cambies nada**: la aplicación vive en la raíz del repo, así que Vercel detecta
+Next.js y su `npm run build` sin ayuda.
 
-| Campo | Valor |
-|---|---|
-| **Root Directory** | `frontend` |
-
-El resto se detecta solo (Next.js, `npm run build`). Si dejas la raíz del repo,
-el build falla porque ahí no hay `package.json`.
+> **Si ya tenías el proyecto creado**, entra a **Settings → General → Root
+> Directory** y **déjalo vacío**. Si sigue diciendo `frontend`, apunta a una
+> carpeta que ya no existe: el despliegue termina *sin error* y sirve un **404
+> NOT_FOUND**, que es justo el síntoma más confuso que puede dar.
 
 ---
 
 ## 3. Variables de entorno en Vercel
 
-**Settings → Environment Variables.** Son las mismas de `frontend/.env.local`.
+**Settings → Environment Variables.** Son las mismas de `.env.local`.
 Cópialas de ahí — abajo está el porqué de cada una.
 
 ### Públicas (viajan al navegador)
@@ -95,7 +94,7 @@ Suscríbete al campo **`messages`**.
 Para comprobar el webhook desplegado, desde tu máquina:
 
 ```bash
-cd frontend && node scripts/probar-webhook.js https://TU-DOMINIO.vercel.app
+node scripts/probar-webhook.js https://TU-DOMINIO.vercel.app
 ```
 
 Debe dar **8 pasadas, 0 fallidas**: verifica el challenge, que un POST sin

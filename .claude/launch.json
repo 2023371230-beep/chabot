@@ -5,7 +5,6 @@
       "name": "bascula",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "frontend",
       "port": 3000
     }
   ]
