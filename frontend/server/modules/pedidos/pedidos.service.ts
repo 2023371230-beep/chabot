@@ -23,6 +23,7 @@ type CalculatedOrder = {
     producto_id: string;
     kg: number;
     precio_kg: number;
+    costo_kg: number;
     subtotal: number;
   }>;
   totalKg: number;
@@ -44,6 +45,24 @@ const normalizeProductos = (productos: PedidoProductoInput[]): PedidoProductoInp
     producto_id,
     kg
   }));
+};
+
+/**
+ * Prepara un renglon para guardarlo.
+ *
+ * Omite `costo_kg` cuando vale 0, y no es un rodeo: 0 significa "no se ha
+ * capturado el costo", que es exactamente lo que expresa dejar que la columna
+ * tome su valor por defecto. De paso, el pedido se sigue creando en una base
+ * donde la columna todavia no existe — un despliegue de codigo por delante de
+ * su migracion no puede tumbar la funcion principal del sistema.
+ */
+const aRenglon = (detalle: CalculatedOrder['detalles'][number], pedidoId: string) => {
+  const { costo_kg, ...resto } = detalle;
+  return {
+    pedido_id: pedidoId,
+    ...resto,
+    ...(costo_kg > 0 ? { costo_kg } : {})
+  };
 };
 
 const getProductosByIds = async (ids: string[]): Promise<Producto[]> => {
@@ -91,6 +110,10 @@ const calculateOrder = async (
     }
 
     const precioKg = toNumber(producto.precio_kg);
+    // El costo se copia AHORA, igual que el precio. Calcular la ganancia
+    // contra el costo actual haria que subir el costo hoy reescribiera la
+    // ganancia de todos los pedidos anteriores.
+    const costoKg = toNumber(producto.costo_kg);
     const subtotal = roundMoney(item.kg * precioKg);
     const stockActual = toNumber(producto.stock_actual);
 
@@ -104,6 +127,7 @@ const calculateOrder = async (
       producto_id: item.producto_id,
       kg: item.kg,
       precio_kg: precioKg,
+      costo_kg: costoKg,
       subtotal
     });
   }
@@ -236,10 +260,7 @@ export const pedidosService = {
       throw new AppError('No se pudo crear el pedido', 400, [pedidoError]);
     }
 
-    const detallesPayload = calculated.detalles.map((detalle) => ({
-      pedido_id: pedido.id,
-      ...detalle
-    }));
+    const detallesPayload = calculated.detalles.map((d) => aRenglon(d, pedido.id));
 
     const { error: detallesError } = await supabase
       .from(DETALLES_TABLE)
@@ -298,12 +319,9 @@ export const pedidosService = {
 
       await supabase.from(DETALLES_TABLE).delete().eq('pedido_id', id);
 
-      const { error: detallesError } = await supabase.from(DETALLES_TABLE).insert(
-        calculated.detalles.map((detalle) => ({
-          pedido_id: id,
-          ...detalle
-        }))
-      );
+      const { error: detallesError } = await supabase
+        .from(DETALLES_TABLE)
+        .insert(calculated.detalles.map((d) => aRenglon(d, id)));
 
       if (detallesError) {
         throw new AppError('No se pudieron actualizar los detalles del pedido', 400, [

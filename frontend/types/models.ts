@@ -3,6 +3,8 @@ export type Producto = {
   nombre: string;
   categoria: string | null;
   precio_kg: number | string;
+  /** Lo que cuesta el kilo. 0 = sin capturar: los reportes no calculan margen. */
+  costo_kg: number | string;
   stock_actual: number | string;
   stock_minimo: number | string;
   activo: boolean;
@@ -30,6 +32,15 @@ export type PedidoDetalle = {
   producto_id: string;
   kg: number | string;
   precio_kg: number | string;
+  /**
+   * Costo del kilo EN EL MOMENTO de la venta, congelado igual que el precio.
+   *
+   * 0 significa que no se habia capturado el costo de ese producto. No es lo
+   * mismo que un costo de cero, y los reportes lo distinguen: con cobertura
+   * parcial no dan margen, porque seria una mezcla de ganancia real e ingreso
+   * puro.
+   */
+  costo_kg?: number | string;
   subtotal: number | string;
   created_at: string;
   productos?: Producto;

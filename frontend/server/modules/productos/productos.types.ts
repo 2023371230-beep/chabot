@@ -3,6 +3,8 @@ export type Producto = {
   nombre: string;
   categoria: string | null;
   precio_kg: number | string;
+  /** Lo que cuesta el kilo al negocio. 0 = sin capturar. */
+  costo_kg: number | string;
   stock_actual: number | string;
   stock_minimo: number | string;
   activo: boolean;
@@ -14,6 +16,7 @@ export type CreateProductoInput = {
   nombre: string;
   categoria?: string;
   precio_kg: number;
+  costo_kg?: number;
   stock_actual?: number;
   stock_minimo?: number;
 };

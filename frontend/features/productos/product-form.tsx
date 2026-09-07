@@ -14,6 +14,7 @@ const schema = z.object({
   nombre: z.string().min(1, 'Escribe el nombre del producto'),
   categoria: z.string().optional(),
   precio_kg: z.coerce.number().min(0, 'El precio no puede ser negativo'),
+  costo_kg: z.coerce.number().min(0, 'El costo no puede ser negativo'),
   stock_actual: z.coerce.number().min(0, 'El stock no puede ser negativo').optional(),
   stock_minimo: z.coerce.number().min(0, 'El minimo no puede ser negativo').optional()
 });
@@ -44,6 +45,7 @@ export function ProductForm({
       nombre: '',
       categoria: 'pollo',
       precio_kg: 0,
+      costo_kg: 0,
       stock_actual: 0,
       stock_minimo: 0
     }
@@ -56,6 +58,7 @@ export function ProductForm({
             nombre: product.nombre,
             categoria: product.categoria ?? 'pollo',
             precio_kg: Number(product.precio_kg),
+            costo_kg: Number(product.costo_kg ?? 0),
             stock_actual: Number(product.stock_actual),
             stock_minimo: Number(product.stock_minimo)
           }
@@ -63,6 +66,7 @@ export function ProductForm({
             nombre: '',
             categoria: 'pollo',
             precio_kg: 0,
+            costo_kg: 0,
             stock_actual: 0,
             stock_minimo: 0
           }
@@ -86,13 +90,22 @@ export function ProductForm({
       </FieldGroup>
 
       <FieldGroup>
-        <Field
-          label="Precio por kilo"
-          required
-          error={errors.precio_kg?.message}
-        >
-          <AffixInput type="number" step="0.01" min="0" prefix="$" {...register('precio_kg')} />
-        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Precio por kilo" required error={errors.precio_kg?.message}>
+            <AffixInput type="number" step="0.01" min="0" prefix="$" {...register('precio_kg')} />
+          </Field>
+
+          {/* El costo va al lado del precio, no en otro grupo: la relacion
+              entre los dos ES el margen, y verlos juntos deja saltar a la vista
+              un costo mayor que el precio. */}
+          <Field
+            label="Costo por kilo"
+            hint="Lo que te cuesta a ti. Dejalo en 0 si no lo llevas: los reportes lo respetan y no calculan ganancia."
+            error={errors.costo_kg?.message}
+          >
+            <AffixInput type="number" step="0.01" min="0" prefix="$" {...register('costo_kg')} />
+          </Field>
+        </div>
       </FieldGroup>
 
       <FieldGroup title="Existencias">

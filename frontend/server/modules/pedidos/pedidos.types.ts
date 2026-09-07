@@ -48,6 +48,14 @@ export type PedidoDetalle = {
   producto_id: string;
   kg: number | string;
   precio_kg: number | string;
+  /**
+   * Costo del kilo EN EL MOMENTO de la venta.
+   *
+   * Congelado igual que precio_kg: si la ganancia se calculara contra el
+   * costo actual, subir el costo hoy reescribiria la ganancia de todos los
+   * pedidos del año pasado.
+   */
+  costo_kg: number | string;
   subtotal: number | string;
   created_at: string;
 };

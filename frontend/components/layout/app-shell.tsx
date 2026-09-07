@@ -17,9 +17,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLogin = pathname === '/login';
 
+  /**
+   * La hoja imprimible va sin barra de navegacion.
+   *
+   * No basta con esconderla al imprimir: lo que se ve en pantalla tiene que
+   * ser lo que sale en papel, o el usuario no puede confiar en la vista
+   * previa.
+   */
+  const esImprimible = pathname.startsWith('/reportes/imprimir');
+
   return (
     <ProtectedRoute>
-      {isLogin ? (
+      {esImprimible ? (
+        <div className="min-h-dvh overflow-y-auto">{children}</div>
+      ) : isLogin ? (
         <div className="h-dvh overflow-y-auto">{children}</div>
       ) : (
         // El proveedor de handoffs envuelve el shell y no cada consumidor: asi

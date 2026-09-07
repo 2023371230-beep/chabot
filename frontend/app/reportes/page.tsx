@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { IconAlerta, IconBascula, IconClientes, IconPedidos } from '@/components/icons';
+import { IconAlerta, IconBascula, IconClientes, IconPedidos, IconReportes } from '@/components/icons';
 import { PageShell } from '@/components/layout/page-shell';
 import { ErrorState } from '@/components/shared/error-state';
 import { LoadingSkeleton } from '@/components/shared/loading-skeleton';
@@ -10,7 +10,12 @@ import { cn } from '@/lib/utils';
 import { endpoints } from '@/lib/api/endpoints';
 import { useApi } from '@/hooks/use-api';
 import { formatCurrency, formatKg } from '@/lib/formatters';
-import { PERIODOS, calcular, rangos, type Periodo } from '@/features/reportes/reportes-data';
+import {
+  PERIODOS,
+  calcular,
+  type Periodo,
+  type RangoManual
+} from '@/features/reportes/reportes-data';
 import { VentasDetalle } from '@/features/reportes/ventas-detalle';
 
 /** Indicador con comparacion contra el periodo anterior del mismo largo. */
@@ -62,6 +67,20 @@ function Indicador({
 
 export default function ReportesPage() {
   const [periodo, setPeriodo] = useState<Periodo>('mes');
+
+  /**
+   * El rango que el usuario elige a mano.
+   *
+   * Arranca en el dia de hoy para las dos fechas: un rango vacio no calcularia
+   * nada y la pantalla se veria rota al elegir "Elegir fechas".
+   */
+  const [manual, setManual] = useState<RangoManual>(() => {
+    const hoy = new Date();
+    const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(
+      hoy.getDate()
+    ).padStart(2, '0')}`;
+    return { desde: iso, hasta: iso };
+  });
   const [vista, setVista] = useState<'resumen' | 'detalle'>('resumen');
   const orders = useApi(() => endpoints.pedidos.list(), [], 'pedidos');
   const inventory = useApi(() => endpoints.inventario.resumen(), [], 'inventario-resumen');
@@ -70,17 +89,12 @@ export default function ReportesPage() {
   const error = orders.error ?? inventory.error;
 
   const d = useMemo(
-    () => calcular(orders.data ?? [], inventory.data ?? [], periodo),
-    [orders.data, inventory.data, periodo]
+    () => calcular(orders.data ?? [], inventory.data ?? [], periodo, manual),
+    [orders.data, inventory.data, periodo, manual]
   );
 
-  const pedidosDelPeriodo = useMemo(() => {
-    const { desde, hasta } = rangos(periodo);
-    return (orders.data ?? []).filter((p) => {
-      const f = new Date(p.created_at);
-      return f >= desde && f < hasta;
-    });
-  }, [orders.data, periodo]);
+  // Salen del mismo calculo, no de una segunda pasada sobre el historico.
+  const pedidosDelPeriodo = d.delPeriodo;
 
   const maxIngreso = d.productos[0]?.ingreso ?? 0;
   const tasaCancelacion = d.totalPeriodo ? (d.cancelados / d.totalPeriodo) * 100 : 0;
@@ -92,6 +106,31 @@ export default function ReportesPage() {
       description="Cuanto vendiste, que se vende mas y quien te compra."
       action={
         <>
+          {/* El PDF sale del periodo que se este viendo: pedirlo otra vez en un
+              dialogo aparte seria repetir una decision que el usuario acaba de
+              tomar. Se abre en otra pestaña para no perder lo que hay en
+              pantalla. */}
+          <button
+            type="button"
+            onClick={() => {
+              const q = new URLSearchParams({ tipo: vista === 'detalle' ? 'detalle' : 'corte', periodo });
+              if (periodo === 'personalizado') {
+                q.set('desde', manual.desde);
+                q.set('hasta', manual.hasta);
+              }
+              window.open(`/reportes/imprimir?${q}`, '_blank', 'noopener');
+            }}
+            className="flex h-9 items-center gap-1.5 rounded-sm border border-input bg-surface px-3 text-xs font-medium transition-colors hover:bg-accent"
+            title={
+              vista === 'detalle'
+                ? 'Libro de pedidos: folio, fecha, cliente y detalle'
+                : 'Corte de caja: ingreso, kilos, productos y mermas'
+            }
+          >
+            <IconReportes />
+            PDF
+          </button>
+
           <div role="group" aria-label="Vista del reporte" className="flex rounded-md bg-muted p-0.5">
             {([
               ['resumen', 'Resumen'],
@@ -116,7 +155,7 @@ export default function ReportesPage() {
         <div
           role="group"
           aria-label="Periodo del reporte"
-          className="flex rounded-md bg-muted p-0.5"
+          className="flex flex-wrap rounded-md bg-muted p-0.5"
         >
           {PERIODOS.map((p) => (
             <button
@@ -136,6 +175,31 @@ export default function ReportesPage() {
             </button>
           ))}
         </div>
+
+        {/* Las fechas solo aparecen cuando hacen falta. Dos campos siempre
+            visibles competirian con los botones rapidos, que es lo que se usa
+            casi siempre. */}
+        {periodo === 'personalizado' ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={manual.desde}
+              max={manual.hasta}
+              onChange={(e) => setManual((r) => ({ ...r, desde: e.target.value }))}
+              aria-label="Desde"
+              className="h-9 rounded-sm border border-input bg-surface px-2 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">a</span>
+            <input
+              type="date"
+              value={manual.hasta}
+              min={manual.desde}
+              onChange={(e) => setManual((r) => ({ ...r, hasta: e.target.value }))}
+              aria-label="Hasta"
+              className="h-9 rounded-sm border border-input bg-surface px-2 text-xs"
+            />
+          </div>
+        ) : null}
         </>
       }
     >
@@ -164,6 +228,20 @@ export default function ReportesPage() {
               ayuda="Lo que cobraste en pedidos confirmados y entregados."
               icono={IconBascula}
             />
+            {d.coberturaCosto > 0 ? (
+              <Indicador
+                etiqueta="Ganancia"
+                valor={formatCurrency(d.ganancia)}
+                variacion={null}
+                hayPrevio={false}
+                ayuda={`Ingresos menos costo. Margen ${d.margen.toFixed(1)}%${
+                  d.coberturaCosto < 0.99
+                    ? ` — con costo capturado en el ${Math.round(d.coberturaCosto * 100)}% de los kilos`
+                    : ''
+                }.`}
+                icono={IconBascula}
+              />
+            ) : null}
             <Indicador
               etiqueta="Kilos vendidos"
               valor={formatKg(d.kg)}
@@ -300,14 +378,34 @@ export default function ReportesPage() {
             </Card>
           </div>
 
-          <p className="flex items-start gap-2 rounded-md border border-border bg-surface-2/60 p-3 text-2xs leading-snug text-muted-foreground">
-            <IconAlerta className="mt-px shrink-0" />
-            <span>
-              Todo esto son <strong className="font-semibold">ingresos</strong>, no
-              ganancia. Para saber cuanto ganas de verdad falta registrar cuanto te cuesta
-              cada kilo; con ese dato estos mismos reportes muestran margen.
-            </span>
-          </p>
+{/* El aviso cambia segun cuantos costos haya capturados. Decir siempre
+              "esto no es ganancia" cuando ya se capturaron todos seria mentir al
+              reves; decir "ganancia" con la mitad de los costos seria peor. */}
+          {d.coberturaCosto >= 0.99 ? null : (
+            <p className="flex items-start gap-2 rounded-md border border-border bg-surface-2/60 p-3 text-2xs leading-snug text-muted-foreground">
+              <IconAlerta className="mt-px shrink-0" />
+              <span>
+                {d.coberturaCosto === 0 ? (
+                  <>
+                    Todo esto son <strong className="font-semibold">ingresos</strong>, no
+                    ganancia. Captura el costo por kilo de cada producto en{' '}
+                    <strong className="font-semibold">Productos</strong> y estos mismos
+                    reportes muestran el margen.
+                  </>
+                ) : (
+                  <>
+                    Solo{' '}
+                    <strong className="font-semibold">
+                      {Math.round(d.coberturaCosto * 100)}%
+                    </strong>{' '}
+                    de los kilos vendidos tiene costo capturado, asi que la ganancia de
+                    abajo se queda corta. Completa el costo del resto de productos para
+                    que el margen sea real.
+                  </>
+                )}
+              </span>
+            </p>
+          )}
         </div>
       )}
     </PageShell>
