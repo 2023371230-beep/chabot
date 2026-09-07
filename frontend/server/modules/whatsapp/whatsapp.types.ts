@@ -171,3 +171,29 @@ export const esSoloEstados = (payload: MetaWebhookPayload): boolean => {
   }
   return hayEstados;
 };
+
+/**
+ * Lo que devuelve atender un mensaje: que contestarle y, si nacio uno, el
+ * pedido.
+ *
+ * `pedidoId` viaja hasta el webhook porque es lo que permite enlazar la
+ * conversacion con el pedido que produjo. Vive aqui y no en un modulo
+ * concreto para que ninguno de los que atienden tenga que importar a otro
+ * solo para nombrar su tipo de vuelta.
+ */
+export type Atencion = { respuesta: string; pedidoId?: string };
+
+/** Un pedido con lo justo para hablar de el con el cliente. */
+export type PedidoDelCliente = {
+  id: string;
+  estado: string;
+  fecha_entrega: string | null;
+  total_kg: number | string;
+  total_precio: number | string;
+  created_at: string;
+  pedido_detalles?: Array<{
+    producto_id: string;
+    kg: number | string;
+    productos?: { nombre?: string } | null;
+  }>;
+};

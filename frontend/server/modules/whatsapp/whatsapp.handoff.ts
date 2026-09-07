@@ -3,6 +3,8 @@ import { env } from '../../config/env';
 import { enviarMensaje } from './whatsapp.client';
 import { ETIQUETA_MOTIVO, recortar, type MotivoHandoff } from '../../../lib/handoff';
 import { MINUTOS_SILENCIO, reactivar } from './whatsapp.silencio';
+import type { Memoria } from './whatsapp.memoria';
+import type { Atencion } from './whatsapp.types';
 
 /**
  * El apagado controlado del bot.
@@ -287,3 +289,30 @@ export const reanudar = async (telefono: string): Promise<boolean> => {
 
 /** El texto que le toca al cliente por cada motivo, para reutilizarlo. */
 export const respuestaDeHandoff = (motivo: MotivoHandoff): string => RESPUESTA[motivo];
+
+
+/**
+ * Pausa el bot y devuelve lo que se le dice al cliente.
+ *
+ * Todo handoff pasa por aqui para que no exista ni un solo camino que
+ * escale sin avisar al encargado.
+ */
+export async function pasarAPersona(params: {
+  telefono: string;
+  memoria: Memoria;
+  motivo: MotivoHandoff;
+  detalle?: string;
+  nombrePerfil?: string;
+  texto?: string;
+}): Promise<Atencion> {
+  params.memoria.limpiarFallos();
+  const respuesta = await pausar({
+    telefono: params.telefono,
+    memoria: params.memoria,
+    motivo: params.motivo,
+    detalle: params.detalle,
+    nombreCliente: params.nombrePerfil,
+    ultimoMensaje: params.texto
+  });
+  return { respuesta };
+}
