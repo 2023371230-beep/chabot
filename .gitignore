@@ -28,3 +28,6 @@ Thumbs.db
 .claude/skills/
 skills-lock.json
 frontend/tsconfig.tsbuildinfo
+
+# Cache incremental de TypeScript: se regenera solo
+tsconfig.tsbuildinfo
