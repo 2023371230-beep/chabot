@@ -56,8 +56,16 @@ export function useApi<T>(
       } finally {
         if (vivo.current) setLoading(false);
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
+    // `loader` queda fuera de las dependencias A PROPOSITO, y `deps` entra
+    // esparcido. Quien llama escribe `useApi(() => endpoints.pedidos.list(),
+    // [], 'pedidos')`: esa flecha es nueva en cada render, asi que incluirla
+    // dispararia una peticion por render, para siempre. Las dependencias
+    // reales las declara quien llama, en `deps`.
+    //
+    // El desactivador estaba una linea mas arriba y no tapaba nada: ESLint
+    // reporta sobre el arreglo de dependencias, no sobre el cuerpo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [clave, ...deps]
   );
 

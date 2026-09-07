@@ -82,6 +82,14 @@ const cabeceras = [
 const nextConfig = {
   reactStrictMode: true,
 
+  // Sin esto, `next lint` solo mira app/, components/, lib/, pages/ y src/ —
+  // y desde que el front vive en client/, dejaba de revisarlo entero sin
+  // avisar: decia "sin errores" porque no estaba mirando. Un lint que no se
+  // sabe que carpetas cubre es peor que no tener lint, porque da confianza.
+  eslint: {
+    dirs: ['app', 'client', 'server', 'shared', 'scripts']
+  },
+
   // El encabezado `X-Powered-By: Next.js` anuncia la tecnologia y su version
   // aproximada. No es una vulnerabilidad, pero es informacion gratis para
   // quien busca objetivos con una version concreta.
