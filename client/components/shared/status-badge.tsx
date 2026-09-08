@@ -13,7 +13,14 @@ const variants: Record<PedidoEstado, 'warning' | 'info' | 'success' | 'danger'> 
  * impresa dentro. `sin descontar` / `stock descontado` explican la unica
  * consecuencia que le importa al dueño.
  */
-const labels: Record<PedidoEstado, string> = {
+/**
+ * Se exporta para que el filtro de Pedidos use ESTE mapa y no el enum crudo.
+ *
+ * Antes el desplegable decia "completado" mientras la insignia de la misma
+ * fila decia "entregado": dos palabras para el mismo hecho, a treinta pixeles
+ * una de otra. Con una sola fuente no pueden volver a divergir.
+ */
+export const ETIQUETA_ESTADO: Record<PedidoEstado, string> = {
   pendiente: 'pendiente',
   confirmado: 'confirmado',
   completado: 'entregado',
@@ -21,5 +28,5 @@ const labels: Record<PedidoEstado, string> = {
 };
 
 export function StatusBadge({ estado }: { estado: PedidoEstado }) {
-  return <Badge variant={variants[estado]}>{labels[estado]}</Badge>;
+  return <Badge variant={variants[estado]}>{ETIQUETA_ESTADO[estado]}</Badge>;
 }

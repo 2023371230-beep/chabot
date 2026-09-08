@@ -18,7 +18,9 @@ import { WhatsappTestForm } from '@/client/features/whatsapp/whatsapp-test-form'
 export default function WhatsappPage() {
   return (
     <PageShell
-      fill
+      // Sin `fill`: el contenido de esta pantalla crece con los chats que
+      // haya, asi que tiene que poder scrollear. Con `fill` no lo hacia, y el
+      // panel de "Probar el asistente" quedaba fuera de alcance.
       title="WhatsApp"
       description="El asistente toma pedidos solo. Aqui se ve todo lo que ha hablado."
     >

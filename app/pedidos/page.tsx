@@ -28,6 +28,7 @@ import { orderStatuses } from '@/client/lib/constants';
 import { useApi } from '@/client/hooks/use-api';
 import { OrderForm } from '@/client/features/pedidos/order-form';
 import { OrdersTable } from '@/client/features/pedidos/orders-table';
+import { ETIQUETA_ESTADO } from '@/client/components/shared/status-badge';
 import type { PedidoEstado } from '@/client/types/models';
 
 export default function PedidosPage() {
@@ -143,9 +144,11 @@ export default function PedidosPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
+            {/* La misma palabra que la insignia de la fila. El enum crudo
+                decia "completado" mientras la fila decia "entregado". */}
             {orderStatuses.map((item) => (
               <SelectItem key={item} value={item}>
-                {item}
+                {ETIQUETA_ESTADO[item]}
               </SelectItem>
             ))}
           </SelectContent>

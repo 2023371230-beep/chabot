@@ -152,10 +152,31 @@ export default function ReportesPage() {
               </button>
             ))}
           </div>
+        {/* En el celular, un desplegable. En pantalla grande, los botones.
+            Ocho botones cortos en una fila son un control segmentado legitimo
+            y rapido cuando caben; cuando no caben se apilan en una columna de
+            312 px pegada al borde, y eso ya no es un control, es un estorbo.
+            El desplegable nativo ademas abre el selector del sistema, que se
+            maneja con el pulgar. */}
+        <label className="sm:hidden">
+          <span className="sr-only">Periodo del reporte</span>
+          <select
+            value={periodo}
+            onChange={(e) => setPeriodo(e.target.value as Periodo)}
+            className="h-9 rounded-md border border-input bg-surface px-2 text-xs font-medium"
+          >
+            {PERIODOS.map((p) => (
+              <option key={p.valor} value={p.valor}>
+                {p.etiqueta}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <div
           role="group"
           aria-label="Periodo del reporte"
-          className="flex flex-wrap rounded-md bg-muted p-0.5"
+          className="hidden rounded-md bg-muted p-0.5 sm:flex sm:flex-wrap"
         >
           {PERIODOS.map((p) => (
             <button

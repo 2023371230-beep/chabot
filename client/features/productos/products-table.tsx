@@ -45,7 +45,50 @@ export function ProductsTable({
         </div>
       )
     },
-    { header: 'Precio', cell: (row) => formatCurrency(row.precio_kg) },
+    {
+      header: 'Precio',
+      className: 'text-right font-num',
+      cell: (row) => formatCurrency(row.precio_kg)
+    },
+    /**
+     * Costo y margen.
+     *
+     * Faltaban, y su ausencia dejaba a Reportes mandando al usuario a una
+     * pantalla que no le enseña lo que le pide: Reportes dice "captura el
+     * costo por kilo en Productos", y Productos no mostraba el costo. Para
+     * saber a cuales les faltaba habia que abrir el formulario de cada uno.
+     *
+     * El margen se muestra calculado y no guardado: es lo que de verdad se
+     * decide en una polleria, donde el precio de compra se mueve cada semana.
+     */
+    {
+      header: 'Costo',
+      className: 'text-right font-num',
+      hideOnMobile: true,
+      cell: (row) => {
+        const costo = Number(row.costo_kg ?? 0);
+        // 0 no es un costo de cero: es un costo sin capturar. Decirlo evita
+        // que alguien lea un margen del 100% y lo crea.
+        if (costo <= 0) return <span className="text-warning">falta</span>;
+        return formatCurrency(costo);
+      }
+    },
+    {
+      header: 'Margen',
+      className: 'text-right font-num',
+      hideOnMobile: true,
+      cell: (row) => {
+        const precio = Number(row.precio_kg);
+        const costo = Number(row.costo_kg ?? 0);
+        if (costo <= 0 || precio <= 0) return <span className="text-muted-foreground">—</span>;
+        const margen = (precio - costo) / precio;
+        return (
+          <span className={margen < 0.1 ? 'font-medium text-danger' : undefined}>
+            {Math.round(margen * 100)}%
+          </span>
+        );
+      }
+    },
     {
       header: 'Stock',
       cell: (row) => {
