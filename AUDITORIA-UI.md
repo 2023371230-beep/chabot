@@ -263,3 +263,82 @@ document.documentElement.scrollWidth - document.documentElement.clientWidth
 ```
 
 Reproducible: abrir cualquier pantalla y pegarlo en la consola.
+
+---
+
+# Segunda auditoría — jerarquía y estructura
+
+Fecha: 8 de septiembre de 2026. Encargo explícito: **no tocar color ni
+tipografía**, revisar la jerarquía de las tablas y la estructura.
+
+Método: evaluación de diseño en un agente aislado + evidencia determinista
+(detector mecánico y medición en el navegador). El detector salió limpio.
+Cada hallazgo se comprobó midiendo antes de tocar código.
+
+Puntuación Nielsen: **24/40 → 26/40** tras los arreglos.
+
+## Lo que se encontró y se arregló
+
+### Contenido inalcanzable (P0)
+
+**WhatsApp.** `fill` apaga el scroll de `PageShell`, y el hijo no tenía el
+suyo. Medido a 1440×900: el contenido llegaba a `y=1448` mientras la página y
+el contenedor medían 900 y 840. **608 px imposibles de ver**, incluido el panel
+entero de "Probar el asistente". No cortado a medias: inalcanzable.
+
+**Reportes en móvil.** La barra de página era de alto fijo, con las acciones en
+`shrink-0` y sin salto de línea. Con 11 controles, el grupo medía **880 px en
+un viewport de 375** y `scrollWidth` seguía siendo 375: recortado, no
+desplazable. Los ocho botones de periodo quedaban fuera y el `<h1>` aplastado a
+ancho cero.
+
+> La lección: `fill` y las barras de alto fijo son trampas silenciosas. No
+> avisan, no desbordan y no scrollean — simplemente esconden. Al revisar una
+> pantalla nueva, medir `scrollHeight` contra el fondo real del contenido, no
+> solo el desbordamiento horizontal.
+
+### Orden por la base de datos, no por el trabajo
+
+La lista de pedidos venía por `created_at desc`. Salía `10 sep, 7 sep, sin
+fecha, sin fecha, 4 sep, 4 sep, 6 sep`: un pedido con tres días de retraso
+sepultado a media lista. Nadie abre esa pantalla preguntando "¿cuál anoté al
+último?". Ahora ordena por fecha de entrega y marca **Atrasado** y **Hoy**.
+
+### Pantallas que se contradicen
+
+Reportes decía "captura el costo por kilo en **Productos**" y Productos no
+mostraba el costo: para saber a cuáles les faltaba había que abrir el
+formulario de los nueve. Se añadieron **Costo** y **Margen**.
+
+El filtro decía `completado` mientras la insignia de la misma fila decía
+`entregado`. Una sola fuente de etiquetas.
+
+### Listas que se repasaban en vez de trabajarse
+
+Sin selección múltiple, sin ordenar por columna y sin atajos: cinco pedidos
+eran diez interacciones. Ahora hay lote, orden por columna (con vuelta al orden
+natural al tercer toque) y `/` y `n`.
+
+### `next lint` no estaba mirando el front
+
+Solo revisa `app/`, `components/`, `lib/`, `pages/` y `src/` por defecto. Al
+mover el front a `client/`, dejó de cubrirlo **sin avisar**. Los "lint limpio"
+anteriores eran ciertos y vacíos. Se declaran las carpetas en
+`next.config.mjs`, y una regla de ESLint impide que `client/` importe de
+`server/` o al revés.
+
+## Lo que queda
+
+- **Sin persistencia de filtros.** Al volver de una interrupción se pierde el
+  filtro, la búsqueda, el periodo y la conversación abierta. Todo vive en
+  `useState`, sin URL ni `sessionStorage`.
+- **Inventario y Productos no tienen búsqueda.** Pedidos es la única con
+  filtros. Para responder "¿qué pasó con la pechuga?" hay que escanear.
+- **El libro de movimientos no lleva saldo corrido**, así que no permite
+  auditar cómo se llegó al stock actual. Y `Cantidad` no lleva signo: una
+  entrada de 5 kg y una venta de 60 kg se ven igual.
+- **El esqueleto de carga no se parece a lo que carga**, así que funciona como
+  un salto de layout con pasos extra.
+- **`Card` + `CardContent` sigue siendo redundante** en Configuración y
+  WhatsApp. Las pantallas que meten la tabla directo en el `Card` se ven mejor.
+- **`Cerrar sesión` no pide confirmación** y está en la zona del pulgar.
