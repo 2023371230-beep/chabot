@@ -37,9 +37,9 @@ export function WhatsappTestForm() {
   const submit = async (values: FormValues) => {
     setSubmitting(true);
     try {
-      const result = await endpoints.whatsapp.webhook(values);
+      const result = await endpoints.whatsapp.probar(values);
       setResponse(result);
-      toast.success('Webhook probado');
+      toast.success('El asistente contesto');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'No se pudo probar');
     } finally {

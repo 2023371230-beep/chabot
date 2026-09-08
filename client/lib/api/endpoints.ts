@@ -54,7 +54,19 @@ export const endpoints = {
       api.patch<ConfiguracionEmpresa>(`/configuracion/${id}`, body)
   },
   whatsapp: {
-    webhook: (body: unknown) => api.post<unknown>('/whatsapp/webhook', body),
+    /**
+     * Probar el asistente desde el panel.
+     *
+     * Va a `/whatsapp/test` y NO a `/whatsapp/webhook`. El webhook es la
+     * puerta de Meta: valida una firma HMAC sobre el cuerpo crudo y rechaza
+     * con 401 todo lo que no venga firmado — incluido el propio dashboard,
+     * por muy buena que sea la sesion. Apuntar ahi hacia que el panel de
+     * pruebas no funcionara NUNCA, y como el cliente traducia cualquier 401 a
+     * "Tu sesion expiro", el mensaje mandaba a buscar el problema al lado
+     * contrario.
+     */
+    probar: (body: { telefono: string; mensaje: string }) =>
+      api.post<unknown>('/whatsapp/test', body),
     // Chats donde el asistente se detuvo y esperan a una persona.
     handoffs: () =>
       api.get<{ total: number; chats: ChatPausado[] }>('/whatsapp/handoffs'),
