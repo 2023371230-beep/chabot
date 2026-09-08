@@ -16,7 +16,8 @@
     "probar:seguridad": "tsx scripts/probar-seguridad.ts",
     "probar:conversaciones": "tsx scripts/probar-conversaciones.ts",
     "probar:doble-confirmacion": "tsx scripts/probar-doble-confirmacion.ts",
-    "probar:produccion": "tsx scripts/probar-produccion.ts"
+    "probar:produccion": "tsx scripts/probar-produccion.ts",
+    "probar:secretos": "tsx scripts/probar-secretos.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

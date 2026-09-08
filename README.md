@@ -67,6 +67,7 @@ con teléfonos que empiezan por `52100000000` y que `limpiar:pruebas` borra.
 | `npm run probar:handoff` | Cuándo el bot se calla y llama a una persona |
 | `npm run probar:seguridad` | La API con sesión y con tokens manipulados |
 | `npm run probar:produccion` | El build real: rutas, cabeceras y API cerrada |
+| `npm run probar:secretos` | Que ninguna llave se escape: git, historial y paquete del navegador |
 | `npm run limpiar:pruebas` | Borra lo que dejaron las pruebas |
 
 `probar:seguridad` necesita `npm run dev` levantado.
