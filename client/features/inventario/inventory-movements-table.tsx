@@ -13,8 +13,16 @@ export function InventoryMovementsTable({
   loading?: boolean;
 }) {
   const columns: Column<InventarioMovimiento>[] = [
-    { header: 'Fecha', cell: (row) => formatDateTime(row.created_at) },
-    { header: 'Producto', cell: (row) => row.productos?.nombre ?? row.producto_id },
+    {
+      header: 'Fecha',
+      ordenar: (row) => row.created_at,
+      cell: (row) => formatDateTime(row.created_at)
+    },
+    {
+      header: 'Producto',
+      ordenar: (row) => row.productos?.nombre ?? '',
+      cell: (row) => row.productos?.nombre ?? row.producto_id
+    },
     {
       header: 'Tipo',
       cell: (row) => (
@@ -31,8 +39,19 @@ export function InventoryMovementsTable({
         </Badge>
       )
     },
-    { header: 'Cantidad', cell: (row) => formatKg(row.cantidad_kg) },
-    { header: 'Motivo', cell: (row) => row.motivo ?? 'Sin motivo' }
+    {
+      header: 'Cantidad',
+      className: 'text-right font-num',
+      ordenar: (row) => Number(row.cantidad_kg),
+      cell: (row) => formatKg(row.cantidad_kg)
+    },
+    {
+      header: 'Motivo',
+      // El '??' no atrapa la cadena vacia, asi que las entradas manuales sin
+      // motivo salian con la celda en blanco. Una raya dice 'no hay dato';
+      // el hueco solo parece un fallo de carga.
+      cell: (row) => row.motivo?.trim() || <span className="text-muted-foreground">—</span>
+    }
   ];
 
   return (

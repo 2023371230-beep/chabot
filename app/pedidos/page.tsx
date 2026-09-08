@@ -1,7 +1,7 @@
 'use client';
 
 import { IconAgregar, IconBuscar } from '@/client/components/icons';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { PageShell } from '@/client/components/layout/page-shell';
 import { ErrorState } from '@/client/components/shared/error-state';
@@ -26,6 +26,7 @@ import {
 import { endpoints } from '@/client/lib/api/endpoints';
 import { orderStatuses } from '@/client/lib/constants';
 import { useApi } from '@/client/hooks/use-api';
+import { useAtajos } from '@/client/hooks/use-atajos';
 import { OrderForm } from '@/client/features/pedidos/order-form';
 import { OrdersTable } from '@/client/features/pedidos/orders-table';
 import { ETIQUETA_ESTADO } from '@/client/components/shared/status-badge';
@@ -42,6 +43,19 @@ export default function PedidosPage() {
   const [status, setStatus] = useState<PedidoEstado | 'todos'>('todos');
   const [query, setQuery] = useState('');
   const [date, setDate] = useState('');
+
+  // Los dos gestos que mas repite el dueño, sin cruzar la pantalla con el
+  // raton: buscar un cliente y capturar un pedido.
+  const campoBusqueda = useRef<HTMLInputElement>(null);
+  useAtajos(
+    useMemo(
+      () => ({
+        '/': () => campoBusqueda.current?.focus(),
+        n: () => setOpen(true)
+      }),
+      []
+    )
+  );
   const error = orders.error ?? products.error ?? clients.error;
 
   const filteredOrders = useMemo(() => {
@@ -129,11 +143,17 @@ export default function PedidosPage() {
         <div className="relative">
           <IconBuscar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            ref={campoBusqueda}
             className="pl-9"
             placeholder="Buscar cliente o telefono"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {/* El atajo se enseña donde se usa. Un atajo que nadie descubre no
+              existe, y una lista de atajos en un menu de ayuda tampoco. */}
+          <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-sm border border-rule px-1.5 py-0.5 text-2xs text-muted-foreground md:block">
+            /
+          </kbd>
         </div>
         <Select
           value={status}
@@ -160,6 +180,7 @@ export default function PedidosPage() {
         orders={filteredOrders}
         loading={orders.loading}
         onUpdated={orders.refetch}
+        enLote
       />
         </>
       )}

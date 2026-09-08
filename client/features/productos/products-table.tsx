@@ -28,6 +28,7 @@ export function ProductsTable({
   const columns: Column<Producto>[] = [
     {
       header: 'Producto',
+      ordenar: (row) => row.nombre,
       primary: true,
       cell: (row) => (
         <div>
@@ -47,6 +48,7 @@ export function ProductsTable({
     },
     {
       header: 'Precio',
+      ordenar: (row) => Number(row.precio_kg),
       className: 'text-right font-num',
       cell: (row) => formatCurrency(row.precio_kg)
     },
@@ -63,6 +65,7 @@ export function ProductsTable({
      */
     {
       header: 'Costo',
+      ordenar: (row) => Number(row.costo_kg ?? 0),
       className: 'text-right font-num',
       hideOnMobile: true,
       cell: (row) => {
@@ -91,6 +94,7 @@ export function ProductsTable({
     },
     {
       header: 'Stock',
+      ordenar: (row) => Number(row.stock_actual),
       cell: (row) => {
         const bajo = Number(row.stock_actual) <= Number(row.stock_minimo);
         return (

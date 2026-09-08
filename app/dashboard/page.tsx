@@ -80,14 +80,11 @@ export default function DashboardPage() {
           <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
             <Card>
               <CardHeader>
-                <CardTitle>
-                  Pedidos por confirmar
-                  {porConfirmar.length ? (
-                    <span className="num ml-1.5 text-muted-foreground">
-                      {porConfirmar.length}
-                    </span>
-                  ) : null}
-                </CardTitle>
+                {/* Sin el numero al lado: ya lo dice el indicador "Por
+                    confirmar" de arriba, y la lista esta justo debajo. El
+                    mismo dato tres veces en una pantalla no lo refuerza, lo
+                    convierte en ruido. */}
+                <CardTitle>Pedidos por confirmar</CardTitle>
                 <Button variant="ghost" size="xs" asChild>
                   <Link href="/pedidos">Ver todos los pedidos</Link>
                 </Button>
@@ -95,6 +92,10 @@ export default function DashboardPage() {
               <OrdersTable
                 orders={porConfirmar.length ? porConfirmar : pedidos}
                 onUpdated={recargar}
+                // Cuando la lista son SOLO los pendientes, la columna Estado
+                // dice lo mismo en todas las filas. Cuando cae al listado
+                // completo, si distingue, y por eso vuelve.
+                ocultarEstado={porConfirmar.length > 0}
                 emptyTitle="Nada pendiente"
                 emptyDescription="Cuando entre un pedido por WhatsApp o lo captures aqui, aparece en esta lista."
               />

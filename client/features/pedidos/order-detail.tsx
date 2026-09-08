@@ -9,6 +9,19 @@ import { ConversacionDelPedido } from '@/client/features/pedidos/conversacion-de
 import { formatCurrency, formatDate, formatKg } from '@/client/lib/formatters';
 import type { Pedido, PedidoDetalle } from '@/client/types/models';
 
+/**
+ * El origen, en palabras del negocio.
+ *
+ * "dashboard" y "manual" son nombres de la base de datos: no le dicen nada a
+ * quien lee la ficha. Lo que necesita saber es si ese pedido lo tomo el bot o
+ * lo capturo una persona.
+ */
+const ORIGEN: Record<string, string> = {
+  whatsapp: 'Llego por WhatsApp',
+  dashboard: 'Lo capturaste tu aqui',
+  manual: 'Por telefono o en persona'
+};
+
 export function OrderDetail({ order }: { order: Pedido }) {
   const details = order.pedido_detalles ?? order.detalles ?? [];
   const cliente = order.clientes ?? order.cliente;
@@ -31,13 +44,14 @@ export function OrderDetail({ order }: { order: Pedido }) {
             "que se pidio" y el "por que se pidio asi" son la misma pregunta,
             y separarlos obligaria a mirar a dos sitios para responderla. */}
         <div className="flex flex-col gap-6">
+          {/* Sin `CardContent` alrededor de la tabla: metia un tercer nivel de
+              caja y empujaba la tabla hacia adentro, al reves de como se ve en
+              Productos e Inventario. La tabla va directo en la tarjeta. */}
           <Card>
             <CardHeader>
               <CardTitle>Productos del pedido</CardTitle>
             </CardHeader>
-            <CardContent>
-              <DataTable data={details} columns={columns} />
-            </CardContent>
+            <DataTable data={details} columns={columns} minWidth="480px" />
           </Card>
 
           <ConversacionDelPedido pedido={order} />
@@ -47,6 +61,15 @@ export function OrderDetail({ order }: { order: Pedido }) {
             <CardTitle>Cliente y estado</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* El estado va PRIMERO: es lo unico de esta columna que decide
+                que se puede hacer con el pedido. Antes estaba en tercer lugar,
+                debajo del telefono. */}
+            <div>
+              <p className="text-sm text-muted-foreground">Estado</p>
+              <div className="mt-1">
+                <StatusBadge estado={order.estado} />
+              </div>
+            </div>
             <div>
               <p className="text-sm text-muted-foreground">Cliente</p>
               <p className="font-medium">{cliente?.nombre ?? 'Sin nombre'}</p>
@@ -56,25 +79,19 @@ export function OrderDetail({ order }: { order: Pedido }) {
               <span>{cliente?.telefono ?? 'Sin telefono'}</span>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Estado</p>
-              <div className="mt-1">
-                <StatusBadge estado={order.estado} />
-              </div>
-            </div>
-            <div>
               <p className="text-sm text-muted-foreground">Origen</p>
-              <p>{order.origen}</p>
+              <p>{ORIGEN[order.origen] ?? order.origen}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Notas</p>
               <p>{order.notas ?? 'Sin notas'}</p>
             </div>
-            <div className="bg-muted/40 p-4 text-sm">
-              <p className="font-medium">Timeline</p>
-              <div className="mt-3 space-y-2 text-muted-foreground">
-                <p>Creado: {formatDate(order.created_at)}</p>
-                <p>Actualizado: {formatDate(order.updated_at)}</p>
-              </div>
+            {/* Sin la caja gris alrededor: era una tarjeta dentro de otra para
+                dos fechas. Y sin "Timeline", que era la unica palabra en
+                ingles de toda la interfaz. */}
+            <div className="border-t border-rule pt-3 text-xs text-muted-foreground">
+              <p>Creado: {formatDate(order.created_at)}</p>
+              <p className="mt-1">Actualizado: {formatDate(order.updated_at)}</p>
             </div>
           </CardContent>
         </Card>

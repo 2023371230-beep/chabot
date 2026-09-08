@@ -1,7 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { PageShell } from '@/client/components/layout/page-shell';
+import { Button } from '@/client/components/ui/button';
 import { ErrorState } from '@/client/components/shared/error-state';
 import { LoadingSkeleton } from '@/client/components/shared/loading-skeleton';
 import { useApi } from '@/client/hooks/use-api';
@@ -30,9 +32,21 @@ export default function PedidoDetailPage() {
   return (
     <PageShell
       title="Detalle de pedido"
-      description={`Pedido ${params.id}`}
+      // El folio corto, no el UUID. `6ba9297a-bcb4-4976-a30c-186be443e48d` no
+      // se lee, no se dicta por telefono y no se busca con el dedo; los ocho
+      // primeros caracteres si, y es lo que ya usa la tabla de Reportes.
+      description={`Ticket ${params.id.slice(0, 8)}`}
       action={
-        order.data ? <OrderStatusActions order={order.data} onUpdated={order.refetch} /> : undefined
+        <>
+          {/* Volver, porque el navegador no siempre tiene a donde. Se llega
+              aqui desde la lista, pero tambien desde un enlace pegado. */}
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/pedidos">Pedidos</Link>
+          </Button>
+          {order.data ? (
+            <OrderStatusActions order={order.data} onUpdated={order.refetch} />
+          ) : null}
+        </>
       }
     >
       {order.loading ? (

@@ -82,13 +82,28 @@ export function DashboardKpis({
     (s, o) => s + Number(o.total_kg),
     0
   );
-  const bajos = inventory.filter(
-    (i) => Number(i.stock_actual) <= Number(i.stock_minimo)
-  ).length;
-  const activos = products.filter((p) => p.activo).length;
+  const bajos = inventory.filter((i) => Number(i.stock_actual) <= Number(i.stock_minimo));
+
+  /**
+   * El aviso nombra los productos, no solo cuenta cuantos.
+   *
+   * "Stock bajo: 1" obliga a ir a Productos y revisar nueve filas para saber
+   * cual. Y en el celular era peor: el panel que lo explicaba estaba detras de
+   * `xl:flex`, asi que el telefono avisaba del problema y nunca decia cual era.
+   * Con mas de tres se vuelve a contar, porque una lista larga en una nota de
+   * dos lineas no se lee.
+   */
+  const nombresBajos = bajos.map((i) => i.nombre);
+  const notaStock = !bajos.length
+    ? 'Todo sobre el minimo'
+    : nombresBajos.length <= 3
+      ? nombresBajos.join(', ')
+      : `${nombresBajos.slice(0, 2).join(', ')} y ${nombresBajos.length - 2} mas`;
 
   return (
-    <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+    // Cuatro y no cinco: se quito "Productos activos", que decia "9 de 9" y
+    // ocupaba un quinto de la tira para informar de que no pasa nada.
+    <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-4">
       <Kpi
         etiqueta="Por confirmar"
         valor={pendientes.length}
@@ -98,10 +113,10 @@ export function DashboardKpis({
       />
       <Kpi
         etiqueta="Stock bajo"
-        valor={bajos}
-        nota={bajos ? 'Productos bajo su minimo' : 'Todo sobre el minimo'}
+        valor={bajos.length}
+        nota={notaStock}
         icono={IconAlerta}
-        tono={bajos ? 'alerta' : 'ok'}
+        tono={bajos.length ? 'alerta' : 'ok'}
       />
       <Kpi
         etiqueta="Kilos comprometidos"
@@ -116,12 +131,6 @@ export function DashboardKpis({
         nota="Stock ya descontado"
         icono={IconCheck}
         tono="ok"
-      />
-      <Kpi
-        etiqueta="Productos activos"
-        valor={activos}
-        nota={`de ${products.length} en catalogo`}
-        icono={IconProductos}
       />
     </div>
   );

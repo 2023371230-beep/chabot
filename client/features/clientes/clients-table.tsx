@@ -31,6 +31,7 @@ export function ClientsTable({
   const columns: Column<Cliente>[] = [
     {
       header: 'Cliente',
+      ordenar: (row) => row.nombre ?? '',
       primary: true,
       cell: (row) => (
         <div className="min-w-0">
