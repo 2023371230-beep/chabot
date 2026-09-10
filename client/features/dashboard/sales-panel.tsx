@@ -1,26 +1,40 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo } from 'react';
 import { IconAlerta } from '@/client/components/icons';
 import { AnimatedNumber } from '@/client/components/motion';
 import { Card, CardHeader, CardTitle } from '@/client/components/ui/card';
+import { estadoDelCosto, hayGanancia } from '@/client/lib/costos';
 import { formatCurrency } from '@/client/lib/formatters';
 import type { Pedido } from '@/client/types/models';
 
 /**
  * Panel de ventas.
  *
- * IMPORTANTE: esto son INGRESOS (lo facturado), no ganancia. La ganancia es
- * venta menos costo, y hoy la tabla `productos` no guarda un costo por kilo,
- * asi que no se puede calcular sin inventar el dato. En cuanto exista
- * `costo_kg`, este mismo panel muestra margen real.
+ * Muestra ingresos SIEMPRE y ganancia SOLO cuando se puede calcular de
+ * verdad. La diferencia no es un detalle contable: un dueño que lee "ganancia"
+ * sobre un numero que en realidad son ingresos toma decisiones de precio con
+ * un margen inventado.
+ *
+ * La ganancia sale del costo congelado en cada renglon al vender, nunca del
+ * costo de hoy. Por eso las ventas anteriores a la captura no llevan ganancia
+ * y no la van a llevar nunca — y por eso el aviso distingue ese caso en vez
+ * de pedir otra vez algo que el dueño ya hizo.
  *
  * Solo cuentan los pedidos confirmados o entregados: un pedido pendiente
  * todavia no es dinero.
  */
 type Fila = { nombre: string; ingreso: number; kg: number };
 
-export function SalesPanel({ orders }: { orders: Pedido[] }) {
+export function SalesPanel({
+  orders,
+  productos = []
+}: {
+  orders: Pedido[];
+  /** El catalogo, solo para saber si el dueño ya capturo sus costos. */
+  productos?: ReadonlyArray<{ costo_kg?: number | string | null }>;
+}) {
   const datos = useMemo(() => {
     const vendidos = orders.filter(
       (o) => o.estado === 'confirmado' || o.estado === 'completado'
@@ -46,6 +60,31 @@ export function SalesPanel({ orders }: { orders: Pedido[] }) {
       }
     }
 
+    /**
+     * La ganancia se calcula SOLO sobre los renglones que traen costo.
+     *
+     * Restar el costo conocido del ingreso total daria un margen inflado:
+     * los kilos sin costo aportarian ingreso puro. Sobre el subconjunto que
+     * si tiene costo, el margen es real; cuanto abarca ese subconjunto lo
+     * dice la cobertura.
+     */
+    let ingresoConCosto = 0;
+    let costoConCosto = 0;
+    let kgConCosto = 0;
+    let kgDelMes = 0;
+
+    for (const pedido of delMes) {
+      for (const d of pedido.pedido_detalles ?? []) {
+        const kg = Number(d.kg ?? 0);
+        const costoKg = Number(d.costo_kg ?? 0);
+        kgDelMes += kg;
+        if (costoKg <= 0) continue;
+        kgConCosto += kg;
+        ingresoConCosto += Number(d.subtotal ?? 0);
+        costoConCosto += costoKg * kg;
+      }
+    }
+
     const top = Array.from(porProducto.values())
       .sort((a, b) => b.ingreso - a.ingreso)
       .slice(0, 5);
@@ -57,9 +96,14 @@ export function SalesPanel({ orders }: { orders: Pedido[] }) {
       pedidos: vendidos.length,
       ticket: vendidos.length ? suma(vendidos, 'total_precio') / vendidos.length : 0,
       top,
-      maxIngreso: top[0]?.ingreso ?? 0
+      maxIngreso: top[0]?.ingreso ?? 0,
+      ganancia: ingresoConCosto - costoConCosto,
+      margen: ingresoConCosto > 0 ? (ingresoConCosto - costoConCosto) / ingresoConCosto : 0,
+      cobertura: kgDelMes > 0 ? kgConCosto / kgDelMes : 0
     };
   }, [orders]);
+
+  const estado = estadoDelCosto(datos.cobertura, productos);
 
   return (
     <Card className="shrink-0">
@@ -75,6 +119,24 @@ export function SalesPanel({ orders }: { orders: Pedido[] }) {
             <div className="num mt-1 text-2xl font-semibold leading-none text-success">
               {formatCurrency(datos.ingresoMes)}
             </div>
+
+            {/* La ganancia va PEGADA al ingreso, no en la cuadricula de abajo:
+                la pregunta del dueño no es "¿cuanto gane?" a secas, es
+                "de esto, ¿cuanto me quedo?". Los dos numeros solo contestan
+                eso si se leen juntos, uno debajo del otro. Y solo aparece
+                cuando es de verdad: una linea de mas es mejor que una cifra
+                inventada. */}
+            {hayGanancia(estado) ? (
+              <p className="mt-1.5 flex items-baseline gap-1.5">
+                <span className="label">Ganancia</span>
+                <span className="num text-sm font-semibold">
+                  {formatCurrency(datos.ganancia)}
+                </span>
+                <span className="num text-2xs text-muted-foreground">
+                  {Math.round(datos.margen * 100)}%
+                </span>
+              </p>
+            ) : null}
           </div>
 
           <dl className="grid grid-cols-3 gap-x-3 gap-y-2 border-t border-rule pt-2.5">
@@ -128,14 +190,56 @@ export function SalesPanel({ orders }: { orders: Pedido[] }) {
             </p>
           )}
 
-          {/* El dato honesto: esto no es ganancia. */}
-          <p className="mt-3 flex items-start gap-1.5 border-t border-rule pt-2.5 text-2xs text-muted-foreground">
-            <IconAlerta className="mt-px shrink-0" />
-            <span>
-              Esto es lo que <strong className="font-semibold">cobraste</strong>, no tu
-              ganancia. Para calcular ganancia falta guardar cuanto te cuesta cada kilo.
-            </span>
-          </p>
+          {/* Cuando los costos estan completos NO se dice nada: la cifra de
+              ganancia de arriba ya lo cuenta todo, y un aviso permanente que
+              no pide nada se vuelve ruido que se deja de leer — justo el que
+              habria que leer el dia que si diga algo. */}
+          {estado.tipo === 'completo' ? null : (
+            <p className="mt-3 flex items-start gap-1.5 border-t border-rule pt-2.5 text-2xs text-muted-foreground">
+              <IconAlerta className="mt-px shrink-0" />
+              <span>
+                {estado.tipo === 'sin_capturar' ? (
+                  <>
+                    Esto es lo que <strong className="font-semibold">cobraste</strong>, no tu
+                    ganancia. Guarda cuanto te cuesta cada kilo en{' '}
+                    <Link href="/productos" className="font-medium text-primary hover:underline">
+                      Productos
+                    </Link>{' '}
+                    y aqui aparece.
+                  </>
+                ) : estado.tipo === 'ventas_anteriores' ? (
+                  <>
+                    Tus costos ya estan guardados. Estas ventas son de{' '}
+                    <strong className="font-semibold">antes</strong> de capturarlos, asi que no
+                    llevan ganancia: el costo se guarda con cada venta. Las nuevas si la van a
+                    mostrar.
+                  </>
+                ) : (
+                  <>
+                    Sale del{' '}
+                    <strong className="font-semibold">
+                      {Math.round(estado.cobertura * 100)}%
+                    </strong>{' '}
+                    de los kilos, que es la parte con costo guardado.{' '}
+                    {estado.faltanProductos ? (
+                      <>
+                        Al resto le falta el costo en{' '}
+                        <Link
+                          href="/productos"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Productos
+                        </Link>
+                        .
+                      </>
+                    ) : (
+                      <>El resto son ventas anteriores a la captura.</>
+                    )}
+                  </>
+                )}
+              </span>
+            </p>
+          )}
         </div>
       </div>
     </Card>

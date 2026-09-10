@@ -102,7 +102,7 @@ export default function DashboardPage() {
             </Card>
 
             <div className="hidden min-h-0 flex-col gap-3 xl:flex">
-              <SalesPanel orders={pedidos} />
+              <SalesPanel orders={pedidos} productos={products.data ?? []} />
               <InventoryAlerts rows={inventory.data ?? []} />
             </div>
           </div>

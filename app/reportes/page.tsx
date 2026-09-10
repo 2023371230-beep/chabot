@@ -8,7 +8,9 @@ import { LoadingSkeleton } from '@/client/components/shared/loading-skeleton';
 import { Card, CardHeader, CardTitle } from '@/client/components/ui/card';
 import { cn } from '@/client/lib/utils';
 import { endpoints } from '@/client/lib/api/endpoints';
+import Link from 'next/link';
 import { useApi } from '@/client/hooks/use-api';
+import { estadoDelCosto } from '@/client/lib/costos';
 import { formatCurrency, formatKg } from '@/client/lib/formatters';
 import {
   PERIODOS,
@@ -84,6 +86,9 @@ export default function ReportesPage() {
   const [vista, setVista] = useState<'resumen' | 'detalle'>('resumen');
   const orders = useApi(() => endpoints.pedidos.list(), [], 'pedidos');
   const inventory = useApi(() => endpoints.inventario.resumen(), [], 'inventario-resumen');
+  // Solo para distinguir "no has capturado costos" de "ya los capturaste,
+  // pero estas ventas son de antes". Comparte cache con Productos.
+  const productos = useApi(() => endpoints.productos.list(), [], 'productos');
 
   const loading = orders.loading || inventory.loading;
   const error = orders.error ?? inventory.error;
@@ -95,6 +100,8 @@ export default function ReportesPage() {
 
   // Salen del mismo calculo, no de una segunda pasada sobre el historico.
   const pedidosDelPeriodo = d.delPeriodo;
+
+  const estadoCosto = estadoDelCosto(d.coberturaCosto, productos.data ?? []);
 
   const maxIngreso = d.productos[0]?.ingreso ?? 0;
   const tasaCancelacion = d.totalPeriodo ? (d.cancelados / d.totalPeriodo) * 100 : 0;
@@ -402,26 +409,50 @@ export default function ReportesPage() {
 {/* El aviso cambia segun cuantos costos haya capturados. Decir siempre
               "esto no es ganancia" cuando ya se capturaron todos seria mentir al
               reves; decir "ganancia" con la mitad de los costos seria peor. */}
-          {d.coberturaCosto >= 0.99 ? null : (
+          {estadoCosto.tipo === 'completo' ? null : (
             <p className="flex items-start gap-2 rounded-md border border-border bg-surface-2/60 p-3 text-2xs leading-snug text-muted-foreground">
               <IconAlerta className="mt-px shrink-0" />
               <span>
-                {d.coberturaCosto === 0 ? (
+                {estadoCosto.tipo === 'sin_capturar' ? (
                   <>
                     Todo esto son <strong className="font-semibold">ingresos</strong>, no
                     ganancia. Captura el costo por kilo de cada producto en{' '}
-                    <strong className="font-semibold">Productos</strong> y estos mismos
-                    reportes muestran el margen.
+                    <Link href="/productos" className="font-medium text-primary hover:underline">
+                      Productos
+                    </Link>{' '}
+                    y estos mismos reportes muestran el margen.
+                  </>
+                ) : estadoCosto.tipo === 'ventas_anteriores' ? (
+                  <>
+                    Tus costos ya estan guardados, pero las ventas de este periodo son{' '}
+                    <strong className="font-semibold">anteriores</strong> a esa captura. El
+                    costo se guarda con cada venta, asi que estas no lo llevan y no lo van a
+                    llevar: el margen aparece en cuanto vendas con los costos ya puestos.
                   </>
                 ) : (
                   <>
-                    Solo{' '}
+                    La ganancia sale del{' '}
                     <strong className="font-semibold">
-                      {Math.round(d.coberturaCosto * 100)}%
+                      {Math.round(estadoCosto.cobertura * 100)}%
                     </strong>{' '}
-                    de los kilos vendidos tiene costo capturado, asi que la ganancia de
-                    abajo se queda corta. Completa el costo del resto de productos para
-                    que el margen sea real.
+                    de los kilos vendidos, que es la parte con costo guardado.{' '}
+                    {estadoCosto.faltanProductos ? (
+                      <>
+                        El resto son productos a los que les falta el costo: complétalos en{' '}
+                        <Link
+                          href="/productos"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Productos
+                        </Link>
+                        .
+                      </>
+                    ) : (
+                      <>
+                        El resto son ventas anteriores a que capturaras los costos, y esas ya
+                        no lo van a llevar.
+                      </>
+                    )}
                   </>
                 )}
               </span>
