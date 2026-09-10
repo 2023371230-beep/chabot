@@ -37,7 +37,19 @@ export function TopNavbar() {
   useEffect(() => {
     if (tocada && pathname.startsWith(tocada)) setTocada(null);
   }, [pathname, tocada]);
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+
+  /**
+   * Como llamar a quien esta dentro.
+   *
+   * Supabase no obliga a guardar un nombre, asi que se busca en los metadatos
+   * y, si no hay, se usa lo que va antes de la arroba del correo. Peor caso,
+   * queda vacio y la barra se ve como antes de que hubiera sesion — nunca un
+   * "undefined" ni un hueco raro.
+   */
+  const meta = (user?.user_metadata ?? {}) as { nombre?: string; full_name?: string };
+  const nombreUsuario =
+    meta.nombre?.trim() || meta.full_name?.trim() || user?.email?.split('@')[0] || '';
   const { theme, setTheme } = useTheme();
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -73,8 +85,13 @@ export function TopNavbar() {
           <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary text-sm font-bold text-primary-foreground">
             B
           </span>
-          <span className="hidden text-sm font-semibold tracking-tight sm:block">
-            Bascula
+          {/* Quien entro, no como se llama la aplicacion.
+              El dueño sabe perfectamente que abrio; repetirselo en cada
+              pantalla no le dice nada. Saber con que cuenta esta dentro si:
+              es el unico sitio donde aparece, y el dia que haya dos personas
+              en el negocio es lo primero que hay que poder mirar. */}
+          <span className="hidden max-w-[14ch] truncate text-sm font-semibold tracking-tight sm:block">
+            {nombreUsuario}
           </span>
         </Link>
 

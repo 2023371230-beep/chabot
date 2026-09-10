@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { IconCerrar } from '@/client/components/icons';
 import { navItems } from '@/client/lib/constants';
 import { cn } from '@/client/lib/utils';
+import { useAuth } from '@/client/hooks/use-auth';
 
 export function MobileMenu({
   open,
@@ -15,6 +16,13 @@ export function MobileMenu({
   onOpenChange: (open: boolean) => void;
 }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  // Mismo criterio que la barra de arriba: quien entro, no como se llama la
+  // aplicacion. En el movil ademas es el UNICO sitio donde cabe el dato.
+  const meta = (user?.user_metadata ?? {}) as { nombre?: string; full_name?: string };
+  const nombreUsuario =
+    meta.nombre?.trim() || meta.full_name?.trim() || user?.email?.split('@')[0] || 'Bascula';
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -22,8 +30,8 @@ export function MobileMenu({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <Dialog.Content className="fixed inset-x-3 top-3 z-50 rounded-lg border border-border bg-surface shadow-lg">
           <div className="flex items-center justify-between border-b border-rule px-3 py-2.5">
-            <Dialog.Title className="text-sm font-semibold">
-              Bascula
+            <Dialog.Title className="max-w-[18ch] truncate text-sm font-semibold">
+              {nombreUsuario}
             </Dialog.Title>
             <Dialog.Close aria-label="Cerrar menu" className="rounded-sm p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground">
               <IconCerrar />
