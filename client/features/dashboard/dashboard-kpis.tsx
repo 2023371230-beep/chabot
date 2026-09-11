@@ -51,7 +51,12 @@ function Kpi({
         <Icono />
       </span>
       <div className="min-w-0">
-        <div className="label truncate">{etiqueta}</div>
+        {/* En movil la etiqueta ENVUELVE en vez de cortarse: en dos columnas
+            angostas "Kilos comprometidos" quedaba en "KILOS COMP...", y en la
+            pantalla de vistazo la etiqueta es justo lo que dice que significa
+            el numero. De `md` para arriba, donde ya hay ancho, se recorta como
+            antes para que las cuatro fichas queden a la misma altura. */}
+        <div className="label md:truncate">{etiqueta}</div>
         <div className="num mt-1 text-lg font-semibold leading-none">
           {typeof valor === 'number' ? (
             <AnimatedNumber value={valor} suffix={sufijo} />

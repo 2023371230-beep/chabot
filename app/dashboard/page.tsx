@@ -39,6 +39,32 @@ export default function DashboardPage() {
   const pedidos = orders.data ?? [];
   const porConfirmar = pedidos.filter((p) => p.estado === 'pendiente');
 
+  // Una sola definicion de la lista, usada por la vista de movil y la de
+  // escritorio: el mismo pedido nunca se pinta distinto segun la pantalla.
+  const listaPorConfirmar = (
+    <Card>
+      <CardHeader>
+        {/* Sin el numero al lado: ya lo dice el indicador "Por confirmar" de
+            arriba, y la lista esta justo debajo. El mismo dato tres veces en
+            una pantalla no lo refuerza, lo convierte en ruido. */}
+        <CardTitle>Pedidos por confirmar</CardTitle>
+        <Button variant="ghost" size="xs" asChild>
+          <Link href="/pedidos">Ver todos los pedidos</Link>
+        </Button>
+      </CardHeader>
+      <OrdersTable
+        orders={porConfirmar.length ? porConfirmar : pedidos}
+        onUpdated={recargar}
+        // Cuando la lista son SOLO los pendientes, la columna Estado dice lo
+        // mismo en todas las filas. Cuando cae al listado completo, si
+        // distingue, y por eso vuelve.
+        ocultarEstado={porConfirmar.length > 0}
+        emptyTitle="Nada pendiente"
+        emptyDescription="Cuando entre un pedido por WhatsApp o lo captures aqui, aparece en esta lista."
+      />
+    </Card>
+  );
+
   return (
     <PageShell
       fill
@@ -77,31 +103,28 @@ export default function DashboardPage() {
             inventory={inventory.data ?? []}
           />
 
-          <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <Card>
-              <CardHeader>
-                {/* Sin el numero al lado: ya lo dice el indicador "Por
-                    confirmar" de arriba, y la lista esta justo debajo. El
-                    mismo dato tres veces en una pantalla no lo refuerza, lo
-                    convierte en ruido. */}
-                <CardTitle>Pedidos por confirmar</CardTitle>
-                <Button variant="ghost" size="xs" asChild>
-                  <Link href="/pedidos">Ver todos los pedidos</Link>
-                </Button>
-              </CardHeader>
-              <OrdersTable
-                orders={porConfirmar.length ? porConfirmar : pedidos}
-                onUpdated={recargar}
-                // Cuando la lista son SOLO los pendientes, la columna Estado
-                // dice lo mismo en todas las filas. Cuando cae al listado
-                // completo, si distingue, y por eso vuelve.
-                ocultarEstado={porConfirmar.length > 0}
-                emptyTitle="Nada pendiente"
-                emptyDescription="Cuando entre un pedido por WhatsApp o lo captures aqui, aparece en esta lista."
-              />
-            </Card>
+          {/* DOS VISTAS, LOS MISMOS DATOS.
+              En el celular el dueño no analiza: consulta de un vistazo, en la
+              calle, con una mano. Y hasta ahora el telefono le escondia justo
+              lo que va a mirar — Ventas y Stock bajo vivian en la columna
+              derecha con `hidden xl:flex`, invisibles bajo 1280 px. Aqui
+              aparecen, apilados y en el orden en que importan: cuanto llevo,
+              que me falta, que tengo que sacar. En pantalla grande manda la
+              maqueta de dos columnas, que si aprovecha el ancho. */}
 
-            <div className="hidden min-h-0 flex-col gap-3 xl:flex">
+          {/* MOVIL — una sola columna, sin recortar informacion clave */}
+          <div className="flex flex-col gap-3 xl:hidden">
+            <SalesPanel orders={pedidos} productos={products.data ?? []} />
+            <InventoryAlerts rows={inventory.data ?? []} />
+            {listaPorConfirmar}
+          </div>
+
+          {/* ESCRITORIO — la accion del dia ocupa el ancho; dinero y avisos, la
+              columna derecha */}
+          <div className="hidden min-h-0 flex-1 gap-3 xl:grid xl:grid-cols-[minmax(0,1fr)_360px]">
+            {listaPorConfirmar}
+
+            <div className="flex min-h-0 flex-col gap-3">
               <SalesPanel orders={pedidos} productos={products.data ?? []} />
               <InventoryAlerts rows={inventory.data ?? []} />
             </div>
