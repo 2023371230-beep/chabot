@@ -43,6 +43,13 @@ export const productosService = {
         nombre: input.nombre,
         categoria: input.categoria ?? 'pollo',
         precio_kg: input.precio_kg,
+        // El costo se escribia solo al EDITAR: el insert no lo listaba, asi
+        // que el formulario de alta lo mandaba y la fila nacia en 0. El dueño
+        // capturaba el costo al crear el producto, vendia, y el panel le decia
+        // "estas ventas son de antes de capturar los costos" sobre un producto
+        // que habia dado de alta con su costo puesto. Como el costo se congela
+        // al vender, esas ventas quedaban sin ganancia para siempre.
+        ...(input.costo_kg !== undefined ? { costo_kg: input.costo_kg } : {}),
         stock_actual: input.stock_actual ?? 0,
         stock_minimo: input.stock_minimo ?? 0
       })

@@ -1,4 +1,8 @@
+import { resumenGanancia, type RenglonVendido } from '@/client/lib/costos';
 import type { InventarioResumen, Pedido } from '@/client/types/models';
+
+/** Un renglon tal como llega en `pedido_detalles`. */
+type PedidoDetalleLike = RenglonVendido & { productos?: { nombre?: string } | null };
 
 export type Periodo =
   | 'hoy'
@@ -137,32 +141,34 @@ export function calcular(
   // actual: un cambio de costo hoy no debe reescribir la ganancia de un pedido
   // de hace tres meses.
   const porProducto = new Map<string, FilaProducto>();
-  let costoTotal = 0;
-  let kgConCosto = 0;
+  const renglones: PedidoDetalleLike[] = [];
 
   for (const pedido of v) {
     for (const d of pedido.pedido_detalles ?? []) {
       const nombre = d.productos?.nombre ?? 'Sin nombre';
       const f = porProducto.get(nombre) ?? { nombre, kg: 0, ingreso: 0, costo: 0 };
       const kgRenglon = Number(d.kg ?? 0);
-      const costoRenglon = Number(d.costo_kg ?? 0) * kgRenglon;
 
       f.kg += kgRenglon;
       f.ingreso += Number(d.subtotal ?? 0);
-      f.costo += costoRenglon;
+      f.costo += Number(d.costo_kg ?? 0) * kgRenglon;
       porProducto.set(nombre, f);
 
-      costoTotal += costoRenglon;
-      // Solo cuentan como "con costo" los kilos cuyo renglon trae un costo
-      // real. Sin esta cuenta no habria forma de saber si un margen del 100%
-      // es una ganga o simplemente que nadie capturo los costos.
-      if (Number(d.costo_kg ?? 0) > 0) kgConCosto += kgRenglon;
+      renglones.push(d);
     }
   }
 
-  const ganancia = ingreso - costoTotal;
+  // La ganancia sale del mismo calculo que el panel de Inicio.
+  //
+  // Antes se hacia aqui a mano, y era `ingreso - costoTotal`: el ingreso
+  // COMPLETO menos el costo de los pocos renglones que lo traian. Con la mitad
+  // de los kilos sin costo, Reportes daba $1,500 (75% de margen) donde Inicio
+  // daba $500 (50%) sobre las mismas ventas. Dos pantallas, dos verdades, y la
+  // buena era la de Inicio.
+  const g = resumenGanancia(renglones);
+  const ganancia = g.ganancia;
   /** Que parte de los kilos vendidos tiene costo capturado. */
-  const coberturaCosto = kg > 0 ? kgConCosto / kg : 0;
+  const coberturaCosto = g.cobertura;
 
   // Cliente
   const porCliente = new Map<string, FilaCliente>();
@@ -210,9 +216,16 @@ export function calcular(
     varPedidos: variacion(v.length, vPrev.length),
     productos: Array.from(porProducto.values()).sort((a, b) => b.ingreso - a.ingreso),
     clientes: Array.from(porCliente.values()).sort((a, b) => b.ingreso - a.ingreso),
-    costo: costoTotal,
+    costo: g.costo,
     ganancia,
-    margen: ingreso > 0 ? (ganancia / ingreso) * 100 : 0,
+    /**
+     * Ingreso de los renglones con costo — el unico contra el que la ganancia
+     * cuadra. `ingreso` (el del periodo entero) NO le resta la ganancia: si
+     * hay kilos sin costo capturado, son numeros de dos universos distintos.
+     */
+    ingresoConCosto: g.ingresoConCosto,
+    /** Porcentaje (0 a 100) sobre `ingresoConCosto`. */
+    margen: g.margen * 100,
     /**
      * Fraccion de los kilos vendidos con costo capturado.
      *

@@ -129,19 +129,31 @@ const main = async (): Promise<void> => {
   console.log('  6. STOCK IMPOSIBLE — no prometer lo que no hay');
   console.log('  ' + '-'.repeat(72));
 
+  // La escena necesita un pedido que sea INSUFICIENTE (mas del doble del
+  // stock) pero a la vez RAZONABLE (bajo el tope de 500 kg que dispara el
+  // guardia de "confirma esa cantidad"). Esas dos condiciones solo caben a la
+  // vez con poco stock: con la camara llena, el triple del stock ya es una
+  // cifra absurda y el bot la manda a confirmar, que es OTRA rama correcta.
+  // Por eso el stock se fija a un valor bajo conocido y se restaura al final:
+  // asi la prueba mide siempre la misma rama, sea cual sea el stock real.
   const { data: prod } = await supabase
     .from('productos')
-    .select('nombre, stock_actual')
+    .select('id, stock_actual')
     .eq('nombre', 'Pechuga')
     .single();
-  const hay = Number(prod?.stock_actual ?? 0);
-  const pide = Math.max(300, Math.ceil(hay * 3));
-  console.log(`         (en camara hay ${hay} kg de Pechuga; se piden ${pide})`);
+  const stockReal = Number(prod?.stock_actual ?? 0);
+  await supabase.from('productos').update({ stock_actual: 40 }).eq('id', prod!.id);
+
+  const pide = 200; // mas del doble de 40, y bien por debajo del tope de 500.
+  console.log(`         (se fija la camara en 40 kg de Pechuga; se piden ${pide})`);
 
   const r6 = await decir(`necesito ${pide} kilos de pechuga para hoy`);
   revisar('no promete la entrega inmediata', !/con gusto\. le anote/i.test(r6));
   revisar('ofrece surtido parcial o programado', /parcial|programar/i.test(r6));
   revisar('pausa el bot', await estaPausada(TEL));
+
+  // El stock real vuelve a su sitio: la prueba no debe dejar huella en la base.
+  await supabase.from('productos').update({ stock_actual: stockReal }).eq('id', prod!.id);
 
   const { data: cliFinal } = await supabase
     .from('clientes')

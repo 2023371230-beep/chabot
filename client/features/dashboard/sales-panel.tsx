@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { IconAlerta } from '@/client/components/icons';
 import { AnimatedNumber } from '@/client/components/motion';
 import { Card, CardHeader, CardTitle } from '@/client/components/ui/card';
-import { estadoDelCosto, hayGanancia } from '@/client/lib/costos';
+import { estadoDelCosto, hayGanancia, resumenGanancia } from '@/client/lib/costos';
 import { formatCurrency } from '@/client/lib/formatters';
 import type { Pedido } from '@/client/types/models';
 
@@ -60,30 +60,10 @@ export function SalesPanel({
       }
     }
 
-    /**
-     * La ganancia se calcula SOLO sobre los renglones que traen costo.
-     *
-     * Restar el costo conocido del ingreso total daria un margen inflado:
-     * los kilos sin costo aportarian ingreso puro. Sobre el subconjunto que
-     * si tiene costo, el margen es real; cuanto abarca ese subconjunto lo
-     * dice la cobertura.
-     */
-    let ingresoConCosto = 0;
-    let costoConCosto = 0;
-    let kgConCosto = 0;
-    let kgDelMes = 0;
-
-    for (const pedido of delMes) {
-      for (const d of pedido.pedido_detalles ?? []) {
-        const kg = Number(d.kg ?? 0);
-        const costoKg = Number(d.costo_kg ?? 0);
-        kgDelMes += kg;
-        if (costoKg <= 0) continue;
-        kgConCosto += kg;
-        ingresoConCosto += Number(d.subtotal ?? 0);
-        costoConCosto += costoKg * kg;
-      }
-    }
+    // La ganancia del mes sale del MISMO calculo que Reportes: si aqui se
+    // sumara distinto, las dos pantallas volverian a contradecirse sobre las
+    // mismas ventas, que es justo el error que `resumenGanancia` vino a cerrar.
+    const g = resumenGanancia(delMes.flatMap((p) => p.pedido_detalles ?? []));
 
     const top = Array.from(porProducto.values())
       .sort((a, b) => b.ingreso - a.ingreso)
@@ -97,9 +77,9 @@ export function SalesPanel({
       ticket: vendidos.length ? suma(vendidos, 'total_precio') / vendidos.length : 0,
       top,
       maxIngreso: top[0]?.ingreso ?? 0,
-      ganancia: ingresoConCosto - costoConCosto,
-      margen: ingresoConCosto > 0 ? (ingresoConCosto - costoConCosto) / ingresoConCosto : 0,
-      cobertura: kgDelMes > 0 ? kgConCosto / kgDelMes : 0
+      ganancia: g.ganancia,
+      margen: g.margen,
+      cobertura: g.cobertura
     };
   }, [orders]);
 

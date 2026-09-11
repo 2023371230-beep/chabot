@@ -60,3 +60,68 @@ export const estadoDelCosto = (
 /** Si con estos datos se puede enseñar una cifra de ganancia. */
 export const hayGanancia = (estado: EstadoCosto): boolean =>
   estado.tipo === 'completo' || estado.tipo === 'parcial';
+
+/** Lo minimo de un renglon de pedido para poder sacarle la ganancia. */
+export type RenglonVendido = {
+  kg?: number | string | null;
+  subtotal?: number | string | null;
+  costo_kg?: number | string | null;
+};
+
+export type ResumenGanancia = {
+  /** Ingreso de los renglones QUE TRAEN COSTO. No es el ingreso del periodo. */
+  ingresoConCosto: number;
+  /** Costo de esos mismos renglones. */
+  costo: number;
+  ganancia: number;
+  /** Fraccion (0 a 1) sobre `ingresoConCosto`, no sobre el ingreso total. */
+  margen: number;
+  kgConCosto: number;
+  kgTotales: number;
+  /** Fraccion (0 a 1) de los kilos vendidos que trae costo. */
+  cobertura: number;
+};
+
+/**
+ * La ganancia de un monton de renglones vendidos.
+ *
+ * Existe porque este calculo estaba escrito dos veces, y las dos versiones NO
+ * daban lo mismo: el Inicio sumaba solo los renglones con costo, y Reportes
+ * restaba el costo conocido del ingreso TOTAL. Con la mitad de los kilos sin
+ * costo capturado, la misma venta de $2,000 salia con $500 de ganancia (50%)
+ * en una pantalla y $1,500 (75%) en la otra. El dueño fija precios con ese
+ * margen; el numero inflado es el que hace daño.
+ *
+ * Los renglones sin costo se ignoran enteros — ingreso incluido. Restar un
+ * costo parcial de un ingreso completo no es "una aproximacion": es contar
+ * esos kilos como ganancia pura. Cuanto abarca la cifra lo dice `cobertura`,
+ * y de ahi sale el aviso de la pantalla.
+ */
+export const resumenGanancia = (
+  renglones: Iterable<RenglonVendido>
+): ResumenGanancia => {
+  let ingresoConCosto = 0;
+  let costo = 0;
+  let kgConCosto = 0;
+  let kgTotales = 0;
+
+  for (const r of renglones) {
+    const kg = Number(r.kg ?? 0);
+    const costoKg = Number(r.costo_kg ?? 0);
+    kgTotales += kg;
+    if (!(costoKg > 0)) continue;
+    kgConCosto += kg;
+    ingresoConCosto += Number(r.subtotal ?? 0);
+    costo += costoKg * kg;
+  }
+
+  return {
+    ingresoConCosto,
+    costo,
+    ganancia: ingresoConCosto - costo,
+    margen: ingresoConCosto > 0 ? (ingresoConCosto - costo) / ingresoConCosto : 0,
+    kgConCosto,
+    kgTotales,
+    cobertura: kgTotales > 0 ? kgConCosto / kgTotales : 0
+  };
+};
