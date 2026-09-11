@@ -296,21 +296,31 @@ export function DataTable<T>({
 
           // El bloque de detalle + acciones. Cuando la ficha es desplegable
           // vive dentro del panel que se abre; cuando no, va siempre visible.
+          const campos = desplegable ? detalle : datos;
           const detalleYAcciones = (
             <>
-              {(desplegable ? detalle : datos).length ? (
-                <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
-                  {(desplegable ? detalle : datos).map((column) => (
-                    <div key={column.header} className="min-w-0">
-                      <dt className="label">{column.header}</dt>
-                      <dd className="mt-0.5 truncate text-sm">{column.cell(row)}</dd>
+              {campos.length ? (
+                // Etiqueta a la IZQUIERDA, valor a la DERECHA, alineados a la
+                // linea base. Antes era una cuadricula con la etiqueta encima
+                // del valor: cada dato empezaba a un ancho distinto y nada caia
+                // en una columna, asi que el ojo no podia recorrer los numeros.
+                // Con el valor pegado al borde derecho, los precios y los kilos
+                // forman una vertical que se lee de un vistazo.
+                <dl className="space-y-1.5">
+                  {campos.map((column) => (
+                    <div
+                      key={column.header}
+                      className="flex items-baseline justify-between gap-4"
+                    >
+                      <dt className="label shrink-0">{column.header}</dt>
+                      <dd className="min-w-0 text-right text-sm">{column.cell(row)}</dd>
                     </div>
                   ))}
                 </dl>
               ) : null}
 
               {acciones.length ? (
-                <div className={cn('flex flex-wrap gap-2', (desplegable ? detalle : datos).length && 'mt-3')}>
+                <div className={cn('flex flex-col gap-2', campos.length && 'mt-3')}>
                   {acciones.map((column) => (
                     <div key={column.header} className="w-full">
                       {column.cell(row)}
@@ -345,19 +355,21 @@ export function DataTable<T>({
                   // sigue navegando; el chevron despliega el resumen aqui
                   // mismo. Dos accesos que no se pisan: el vistazo rapido con
                   // el pulgar y la ficha completa cuando de verdad hace falta.
-                  <div className="flex min-w-0 flex-1 items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{principal.cell(row)}</div>
-                      {resumen.length ? (
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                          {resumen.map((column) => (
-                            <span key={column.header} className="text-sm text-muted-foreground">
-                              {column.cell(row)}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <div className="min-w-0 flex-1 text-sm font-medium">{principal.cell(row)}</div>
+                    {resumen.length ? (
+                      // El resumen va a la DERECHA, en columna: el numero clave
+                      // (el total) cae pegado al borde y forma la vertical que
+                      // deja comparar una tarjeta con otra sin leer cada cifra.
+                      // Antes iba debajo del nombre, suelto a media tarjeta.
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {resumen.map((column) => (
+                          <div key={column.header} className="text-right text-sm">
+                            {column.cell(row)}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {/* 44x44 completos de area de toque — la medida del pulgar
                         de Apple — sin agrandar el icono: los margenes negativos
                         absorben el tamaño extra en el padding de la ficha para
@@ -368,7 +380,7 @@ export function DataTable<T>({
                       onClick={() => alternarAbierta(clave)}
                       aria-expanded={abierta}
                       aria-label={abierta ? 'Ocultar detalle' : 'Ver detalle'}
-                      className="-my-2.5 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition-colors active:bg-muted/50"
+                      className="-my-2.5 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center self-center rounded-md transition-colors active:bg-muted/50"
                     >
                       <IconChevron
                         className={cn(

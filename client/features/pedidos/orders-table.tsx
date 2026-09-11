@@ -144,7 +144,11 @@ export function OrdersTable({
       // de un vistazo antes de decidir si abre el pedido.
       resumenMovil: true,
       ordenar: (row) => Number(row.total_precio),
-      cell: (row) => <span className="font-num">{formatCurrency(row.total_precio)}</span>
+      // Semibold en la ficha de movil: el total es el numero que el dueño
+      // busca primero, y el peso es lo que lo hace saltar sin agrandarlo ni
+      // pintarlo de color. En la tabla de escritorio la celda hereda el peso
+      // normal de la fila, asi que esto solo pesa donde debe.
+      cell: (row) => <span className="font-num font-semibold">{formatCurrency(row.total_precio)}</span>
     },
     {
       header: 'Acciones',
