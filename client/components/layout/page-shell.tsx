@@ -59,7 +59,20 @@ export function PageShell({
       <div
         className={cn(
           'min-h-0 flex-1',
-          fill ? 'flex flex-col overflow-hidden p-3 lg:p-4' : 'scroll-y p-3 lg:p-4'
+          // `fill` es una maqueta de ESCRITORIO: altura fija, sin scroll de
+          // pagina, y las tablas scrollean por dentro. En un telefono eso es
+          // dañino — el contenedor `overflow-hidden` recorta lo que no cabe y
+          // no hay forma de bajar. En el Inicio dejaba la lista de pedidos
+          // cortada a media pantalla, sin salida.
+          //
+          // Por eso el candado de altura entra solo de `lg` para arriba.
+          // Debajo, la pagina scrollea sola como cualquier pagina de movil, que
+          // es lo que un dedo espera. `overflow-y-auto` de base y
+          // `lg:overflow-hidden` encima: la variante responsiva gana en pantalla
+          // grande y recupera el comportamiento de escritorio intacto.
+          fill
+            ? 'overflow-y-auto overscroll-contain p-3 lg:flex lg:flex-col lg:overflow-hidden lg:p-4'
+            : 'scroll-y p-3 lg:p-4'
         )}
       >
         {children}
