@@ -305,3 +305,10 @@ export const IconReportes = (p: IconProps) => (
     <path d="M11.25 11.25V6.5" />
   </Icon>
 );
+
+/** Galon hacia abajo. Gira 180 para indicar "abierto". */
+export const IconChevron = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4.25 6.25 8 10l3.75-3.75" />
+  </Icon>
+);

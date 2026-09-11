@@ -1,7 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { IconBandeja } from '@/client/components/icons';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { IconBandeja, IconChevron } from '@/client/components/icons';
 import {
   Table,
   TableBody,
@@ -24,6 +25,16 @@ export type Column<T> = {
   full?: boolean;
   /** Se oculta en la ficha de movil por redundante. */
   hideOnMobile?: boolean;
+  /**
+   * En movil, este dato va en el RESUMEN de la ficha — lo que se ve sin tocar.
+   *
+   * Marcar aunque sea una columna convierte la ficha en desplegable: el
+   * resumen (principal + estas columnas) queda a la vista para escanear, y el
+   * resto del detalle y las acciones se abren al tocar. Es la divulgacion
+   * progresiva de Apple: lo comun primero, lo demas un nivel mas adentro. Sin
+   * ninguna marcada, la ficha muestra todo de golpe como siempre.
+   */
+  resumenMovil?: boolean;
   /**
    * Valor por el que se ordena al pulsar el encabezado.
    *
@@ -77,6 +88,11 @@ export function DataTable<T>({
 }) {
   const [orden, setOrden] = useState<{ header: string; sentido: Sentido } | null>(null);
   const [elegidas, setElegidas] = useState<Set<React.Key>>(new Set());
+  // Que fichas de movil estan abiertas. Empiezan cerradas: el valor de una
+  // lista es poder escanearla, y todo desplegado de entrada es la lista larga
+  // de siempre.
+  const [abiertas, setAbiertas] = useState<Set<React.Key>>(new Set());
+  const quieto = useReducedMotion();
 
   const resolveRowKey = (row: T): React.Key => {
     if (getRowKey) return getRowKey(row);
@@ -128,6 +144,15 @@ export function DataTable<T>({
     });
   };
 
+  const alternarAbierta = (clave: React.Key): void => {
+    setAbiertas((prev) => {
+      const s = new Set(prev);
+      if (s.has(clave)) s.delete(clave);
+      else s.add(clave);
+      return s;
+    });
+  };
+
   const clavesVisibles = filas.map(resolveRowKey);
   const todasElegidas = clavesVisibles.length > 0 && clavesVisibles.every((k) => elegidas.has(k));
   const seleccionadas = filas.filter((f) => elegidas.has(resolveRowKey(f)));
@@ -147,6 +172,14 @@ export function DataTable<T>({
   const principal = columns.find((c) => c.primary) ?? columns[0];
   const acciones = columns.filter((c) => c.full);
   const datos = columns.filter((c) => c !== principal && !c.full && !c.hideOnMobile);
+
+  // Divulgacion progresiva: si alguna columna se marco para el resumen, la
+  // ficha de movil se pliega. Lo marcado se ve sin tocar (para escanear); el
+  // resto del detalle y las acciones se abren al tocar. Sin nada marcado, la
+  // ficha sigue mostrando todo de golpe — cero cambio para las demas listas.
+  const resumen = datos.filter((c) => c.resumenMovil);
+  const detalle = datos.filter((c) => !c.resumenMovil);
+  const desplegable = resumen.length > 0;
 
   return (
     <>
@@ -252,19 +285,51 @@ export function DataTable<T>({
         </div>
       </div>
 
-      {/* Movil */}
-      <div className="scroll-y flex min-h-0 flex-1 flex-col gap-2 p-2 md:hidden">
+      {/* Movil: mas aire que en la tabla — `gap-2.5 p-2.5` — porque el espacio
+          es lo que hace que una lista deje de sentirse como un panel de
+          administracion y empiece a sentirse como una app. */}
+      <div className="scroll-y flex min-h-0 flex-1 flex-col gap-2.5 p-2.5 md:hidden">
         {filas.map((row) => {
           const clave = resolveRowKey(row);
+          const abierta = abiertas.has(clave);
+          const hayBloque = (desplegable ? detalle : datos).length > 0 || acciones.length > 0;
+
+          // El bloque de detalle + acciones. Cuando la ficha es desplegable
+          // vive dentro del panel que se abre; cuando no, va siempre visible.
+          const detalleYAcciones = (
+            <>
+              {(desplegable ? detalle : datos).length ? (
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-2">
+                  {(desplegable ? detalle : datos).map((column) => (
+                    <div key={column.header} className="min-w-0">
+                      <dt className="label">{column.header}</dt>
+                      <dd className="mt-0.5 truncate text-sm">{column.cell(row)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : null}
+
+              {acciones.length ? (
+                <div className={cn('flex flex-wrap gap-2', (desplegable ? detalle : datos).length && 'mt-3')}>
+                  {acciones.map((column) => (
+                    <div key={column.header} className="w-full">
+                      {column.cell(row)}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          );
+
           return (
             <article
               key={clave}
               className={cn(
-                'rounded-md border bg-surface p-3',
+                'overflow-hidden rounded-lg border bg-surface',
                 elegidas.has(clave) ? 'border-primary/60 bg-primary/5' : 'border-border'
               )}
             >
-              <div className="flex items-start gap-2.5">
+              <div className="flex items-start gap-2.5 p-3">
                 {accionesEnLote ? (
                   <input
                     type="checkbox"
@@ -274,28 +339,70 @@ export function DataTable<T>({
                     className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-primary"
                   />
                 ) : null}
-                <div className="min-w-0 flex-1 text-sm font-medium">{principal.cell(row)}</div>
+
+                {desplegable ? (
+                  // El nombre (que suele ser el enlace al detalle completo)
+                  // sigue navegando; el chevron despliega el resumen aqui
+                  // mismo. Dos accesos que no se pisan: el vistazo rapido con
+                  // el pulgar y la ficha completa cuando de verdad hace falta.
+                  <div className="flex min-w-0 flex-1 items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium">{principal.cell(row)}</div>
+                      {resumen.length ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          {resumen.map((column) => (
+                            <span key={column.header} className="text-sm text-muted-foreground">
+                              {column.cell(row)}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    {/* 44x44 completos de area de toque — la medida del pulgar
+                        de Apple — sin agrandar el icono: los margenes negativos
+                        absorben el tamaño extra en el padding de la ficha para
+                        que no empuje la maqueta. `active:` responde en el
+                        momento del toque, no al soltar. */}
+                    <button
+                      type="button"
+                      onClick={() => alternarAbierta(clave)}
+                      aria-expanded={abierta}
+                      aria-label={abierta ? 'Ocultar detalle' : 'Ver detalle'}
+                      className="-my-2.5 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-md transition-colors active:bg-muted/50"
+                    >
+                      <IconChevron
+                        className={cn(
+                          'text-muted-foreground transition-transform duration-200',
+                          abierta && 'rotate-180'
+                        )}
+                      />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="min-w-0 flex-1 text-sm font-medium">{principal.cell(row)}</div>
+                )}
               </div>
 
-              {datos.length ? (
-                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-rule pt-2">
-                  {datos.map((column) => (
-                    <div key={column.header} className="min-w-0">
-                      <dt className="label">{column.header}</dt>
-                      <dd className={cn('mt-0.5 truncate text-sm')}>{column.cell(row)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : null}
-
-              {acciones.length ? (
-                <div className="mt-2.5 flex flex-wrap gap-2 border-t border-rule pt-2.5">
-                  {acciones.map((column) => (
-                    <div key={column.header} className="w-full">
-                      {column.cell(row)}
-                    </div>
-                  ))}
-                </div>
+              {desplegable ? (
+                <AnimatePresence initial={false}>
+                  {abierta ? (
+                    <motion.div
+                      key="detalle"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      // Resorte critico (sin rebote) para un panel que no se
+                      // arrastro: aparece firme, no saltarin. Con "menos
+                      // movimiento" activado, se abre sin animar.
+                      transition={quieto ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.35 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="border-t border-rule px-3 pb-3 pt-2.5">{detalleYAcciones}</div>
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+              ) : hayBloque ? (
+                <div className="border-t border-rule px-3 pb-3 pt-2.5">{detalleYAcciones}</div>
               ) : null}
             </article>
           );

@@ -122,6 +122,9 @@ export function OrdersTable({
     },
     {
       header: 'Estado',
+      // Al resumen de la ficha de movil: el estado es lo primero que se mira
+      // para saber si un pedido pide accion, y tiene que verse sin desplegar.
+      resumenMovil: true,
       ordenar: (row) => row.estado,
       cell: (row) => <StatusBadge estado={row.estado} />
     },
@@ -137,8 +140,11 @@ export function OrdersTable({
     {
       header: 'Total',
       className: 'text-right font-num',
+      // Tambien al resumen: cuanto es, junto al estado, es lo que el dueño lee
+      // de un vistazo antes de decidir si abre el pedido.
+      resumenMovil: true,
       ordenar: (row) => Number(row.total_precio),
-      cell: (row) => formatCurrency(row.total_precio)
+      cell: (row) => <span className="font-num">{formatCurrency(row.total_precio)}</span>
     },
     {
       header: 'Acciones',
